@@ -6,8 +6,8 @@ from sympy import im
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-import torch._dynamo.config
-import torch._inductor.config
+# import torch._dynamo.config
+# import torch._inductor.config
 import copy
 # torch._inductor.config.coordinate_descent_tuning = True
 # torch._inductor.config.triton.unique_kernel_names = True

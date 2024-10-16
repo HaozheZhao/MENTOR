@@ -16,8 +16,20 @@ import torch.nn as nn
 from torch.nn import functional as F
 from utils.drop_path import DropPath
 from .blip2 import Blip2ForConditionalGeneration,Blip2Config,Blip2Processor
+from .instructblip import InstructBlipForConditionalGeneration, InstructBlipConfig, InstructBlipProcessor
 
-
+MULTIMODAL_ENCODER={
+    "blip": Blip2ForConditionalGeneration,
+    "instructblip":InstructBlipForConditionalGeneration
+}
+MULTIMODAL_PORCESSOR={
+    "blip": Blip2Processor,
+    "instructblip":InstructBlipProcessor
+}
+MULTIMODAL_CONFIG={
+    "blip": Blip2Config,
+    "instructblip":InstructBlipConfig
+}
 def find_multiple(n: int, k: int):
     if n % k == 0:
         return n
@@ -60,6 +72,7 @@ class ModelArgs:
     image_place_holder: str = '<image>'
     processor_path: Optional[str] = None
     max_seq_length: int = 120
+    multimodal_encoder: str = "blip"
     
         
 
@@ -270,7 +283,7 @@ class TransformerBlock(nn.Module):
         return out
 
 
-def get_model(model_name_or_path, config, full_bf16_training =False , full_fp16_training = False):
+def get_model(args,model_name_or_path, config, full_bf16_training =False , full_fp16_training = False):
     
     if (full_bf16_training or full_fp16_training):
         dtype = torch.float16 if full_fp16_training else torch.bfloat16
@@ -278,7 +291,7 @@ def get_model(model_name_or_path, config, full_bf16_training =False , full_fp16_
         dtype = torch.float32
     print(f"model_name_or_path:{model_name_or_path}")
 
-    model = Blip2ForConditionalGeneration(config).to(dtype)
+    model = MULTIMODAL_ENCODER[args.multimodal_encoder](config).to(dtype)
     # model = Blip2ForConditionalGeneration.from_pretrained(
     #     model_name_or_path,
     #     config=config,
@@ -307,7 +320,7 @@ def get_model(model_name_or_path, config, full_bf16_training =False , full_fp16_
 def get_text_encoder(args):
 
     model_name_or_path = args.model_name_or_path
-    config = Blip2Config.from_pretrained(
+    config = MULTIMODAL_CONFIG[args.multimodal_encoder].from_pretrained(
                 model_name_or_path
         )
     config.use_decoder_only_language_model =False
@@ -318,14 +331,14 @@ def get_text_encoder(args):
     full_bf16_training = args.mixed_precision == 'bf16'
     full_fp16_training = args.mixed_precision == 'fp16'
 
-    model = get_model(model_name_or_path, config, full_bf16_training,full_fp16_training)
+    model = get_model(args,model_name_or_path, config, full_bf16_training,full_fp16_training)
     
 
     if args.image_place_holder is not None:
         image_place_holder = args.image_place_holder 
     print(f"image_place_holder: {image_place_holder}")
     processor_path =  args.processor_path if args.processor_path is not None else args.model_name_or_path
-    processor = Blip2Processor.from_pretrained(
+    processor = MULTIMODAL_PORCESSOR[args.multimodal_encoder].from_pretrained(
             processor_path
     )
     origin_token_length = len(processor.tokenizer)
@@ -357,7 +370,7 @@ class Transformer(nn.Module):
         else:
             raise Exception("please check model type")
         if self.config.use_vision_tower:
-            self.text_encoder_config , self.multimodal_encoder,self.multimodel_processor = get_text_encoder(config)
+            self.text_encoder_config , self.multimodal_encoder,self.multimodal_processor = get_text_encoder(config)
             latent_size = config.latent_size 
             self.code_len = latent_size ** 2
             self.t5_feature_max_len = 120

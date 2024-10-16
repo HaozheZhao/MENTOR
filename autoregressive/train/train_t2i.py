@@ -10,14 +10,13 @@
 # # Wait for the client to attach to the debugger before proceeding
 # print("Waiting for debugger attach...")
 # debugpy.wait_for_client()
-# import torch._dynamo
-# torch._dynamo.config.suppress_errors = True
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True
 from textwrap import fill
-
 import torch
 import socket
 import wandb
-torch._dynamo.config.capture_scalar_outputs = True
+# torch._dynamo.config.capture_scalar_outputs = True
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 from tqdm import tqdm
@@ -27,6 +26,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
 from glob import glob
+from transformers import BertTokenizer
 import time
 import argparse
 import os
@@ -91,7 +91,8 @@ def postprocess(tensors, mean=[0.48145466, 0.4578275, 0.40821073], std=[0.268629
 
 def main(args):
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
-    
+    print(f"Using seed: {args.global_seed}")
+    print(f"Using visual encoder type: {args.multimodal_encoder}")
     # Setup DDP:
     init_distributed_mode(args)
     assert args.global_batch_size % dist.get_world_size() == 0, f"Batch size must be divisible by world size."
@@ -150,6 +151,7 @@ def main(args):
         image_place_holder = args.image_place_holder,
         processor_path = args.processor_path,
         max_seq_length = args.cls_token_num,
+        multimodal_encoder = args.multimodal_encoder
         
     ).to(device)
     logger.info(f"GPT Parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -180,20 +182,24 @@ def main(args):
         # Extract individual fields from batch data:
         expected_length = len(batch[0])
 
-        if expected_length == 6:
+        if expected_length == 7:
             # Unpack according to the expected size of 6
-            images, pixel_values_list, cond_idxs, attention_masks, image_masks, valids = zip(*batch)
-        elif expected_length == 7:
-            # Unpack according to the expected size of 7
-            images, pixel_values_list, cond_idxs, attention_masks, image_masks, valids, pixel_source = zip(*batch)
-            pixel_source = torch.stack(pixel_source)
+            images, pixel_values_list, cond_idxs, attention_masks, image_masks,img_pixel, valids = zip(*batch)
+            img_pixel = torch.stack(img_pixel)
         elif expected_length == 8:
-            # Unpack according to the expected size of 8
-            images, pixel_values_list, cond_idxs, attention_masks, image_masks, valids, text_input_ids, text_attention_mask = zip(*batch)
-        elif expected_length == 9:
-            # Unpack according to the expected size of 9
-            images, pixel_values_list, cond_idxs, attention_masks, image_masks, valids, pixel_source, text_input_ids, text_attention_mask = zip(*batch)
+            # Unpack according to the expected size of 7
+            images, pixel_values_list, cond_idxs, attention_masks, image_masks,img_pixel, valids, pixel_source = zip(*batch)
             pixel_source = torch.stack(pixel_source)
+            img_pixel = torch.stack(img_pixel)
+        elif expected_length == 9:
+            # Unpack according to the expected size of 8
+            images, pixel_values_list, cond_idxs, attention_masks, image_masks, img_pixel,valids, text_input_ids, text_attention_mask = zip(*batch)
+            img_pixel = torch.stack(img_pixel)
+        elif expected_length == 10:
+            # Unpack according to the expected size of 9
+            images, pixel_values_list, cond_idxs, attention_masks, image_masks,img_pixel, valids, pixel_source, text_input_ids, text_attention_mask = zip(*batch)
+            pixel_source = torch.stack(pixel_source)
+            img_pixel = torch.stack(img_pixel)
         else:
             # Handle unexpected cases
             raise ValueError(f"Unexpected batch element size: {expected_length}. Expecting 6 or 7.")
@@ -231,27 +237,51 @@ def main(args):
         # Stack valid flags  
         valids = torch.stack(valids)  
 
-        if expected_length == 8 or expected_length == 9:
+        if expected_length == 9 or expected_length == 10:
             text_input_ids_padded = pad_sequence(text_input_ids, batch_first=True, padding_value=0)
             text_attention_mask_padded = pad_sequence(text_attention_mask, batch_first=True, padding_value=0)
-            
-        if expected_length == 8:
-            return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids, text_input_ids_padded, text_attention_mask_padded
-        elif :
-            return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids, pixel_source, text_input_ids_padded, text_attention_mask_padded
+        
+        # print(f"images shape: {images.shape}")
+        # print(f"pixel_values shape: {pixel_values.shape}")
+        # print(f"cond_idxs_padded shape: {cond_idxs_padded.shape}")
+        # print(f"attention_masks_padded shape: {attention_masks_padded.shape}")
+        # print(f"padded_image_masks shape: {padded_image_masks.shape}")
+        # print(f"valids shape: {valids.shape}")
+        # print(f"text_input_ids_padded shape: {text_input_ids_padded.shape}")
+        # print(f"text_attention_mask_padded shape: {text_attention_mask_padded.shape}")
+        # print("+==========================")
 
+        # if expected_length == 9:
+        #     return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, img_pixel, valids, text_input_ids_padded, text_attention_mask_padded
+        # elif expected_length == 10:
+        #     return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks,img_pixel, valids, pixel_source, text_input_ids_padded, text_attention_mask_padded
+        
+        valids_bool = valids.bool()
 
-        if expected_length == 6:
-            return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids
-        elif expected_length == 7:
-            return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids , pixel_source
-        elif expected_length == 8:
-            return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids , text_input_ids_padded, text_attention_mask
-        elif expected_length == 9:
-            return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids , pixel_source, text_input_ids_padded, text_attention_mask
+        if valids_bool.sum() > 0:
+            common_items = [images[valids_bool], pixel_values[valids_bool], cond_idxs_padded[valids_bool], attention_masks_padded[valids_bool], padded_image_masks[valids_bool],img_pixel[valids_bool], valids[valids_bool]]  
+
+            if expected_length == 8:
+                common_items.extend([pixel_source[valids_bool]])
+            elif expected_length == 9:
+                common_items.extend([text_input_ids_padded[valids_bool], text_attention_mask_padded[valids_bool]])
+            elif expected_length == 10:
+                common_items.extend([pixel_source[valids_bool], text_input_ids_padded[valids_bool], text_attention_mask_padded[valids_bool]])
+        else:
+            common_items = [images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks,img_pixel, valids]  
+
+            if expected_length == 8:
+                common_items.extend([pixel_source])
+            elif expected_length == 9:
+                common_items.extend([text_input_ids_padded, text_attention_mask_padded])
+            elif expected_length == 10:
+                common_items.extend([pixel_source, text_input_ids_padded, text_attention_mask_padded])
+
+        return tuple(common_items)
+
 
     if args.use_vision_tower:
-        dataset = build_dataset(args, transform=transform, data_path = args.data_path, processor = model.multimodel_processor,with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
+        dataset = build_dataset(args, transform=transform, data_path = args.data_path, processor = model.multimodal_processor,with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
     else:
         dataset = build_dataset(args, transform=transform)
 
@@ -303,7 +333,7 @@ def main(args):
 
 
     if args.do_eval:
-        val_dataset = build_dataset(args, transform=transform, data_path = args.val_data_path, processor = model.multimodel_processor, max_samples = args.max_eval_samples,is_val = True, with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
+        val_dataset = build_dataset(args, transform=transform, data_path = args.val_data_path, processor = model.multimodal_processor, max_samples = args.max_eval_samples,is_val = True, with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
         val_sampler = DistributedSampler(
             val_dataset,
             num_replicas=dist.get_world_size(),
@@ -332,9 +362,10 @@ def main(args):
             result = load_sharded_checkpoint(model.multimodal_encoder,args.model_name_or_path,strict=False)
             print(f'load multimodal_encoder from pretrained CKPT: {args.model_name_or_path}  Result: ',result)
             if args.subject_driven:
-                subject_embedding_ckpt = torch.load(args.load_subject_embedding, map_location="cpu")
-                model.multimodal_encoder.qformer.embeddings.load_state_dict(subject_embedding_ckpt, strict=True) 
-                del subject_embedding_ckpt
+                if args.multimodal_encoder == 'blip':
+                    subject_embedding_ckpt = torch.load(args.load_subject_embedding, map_location="cpu")
+                    model.multimodal_encoder.qformer.embeddings.load_state_dict(subject_embedding_ckpt, strict=True) 
+                    del subject_embedding_ckpt
             strict = False
         checkpoint = torch.load(args.load_from_checkpoint, map_location="cpu")
         result_llama = model.load_state_dict(checkpoint["model"], strict=strict)
@@ -347,14 +378,16 @@ def main(args):
         optimizer.load_state_dict(checkpoint["optimizer"])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
         train_steps = checkpoint["steps"] if "steps" in checkpoint else int(args.gpt_ckpt.split('/')[-1].split('.')[0])
-        start_epoch = int(train_steps / int(len(dataset) / args.global_batch_size))
-        train_steps = int(start_epoch * int(len(dataset) / args.global_batch_size))
+        steps_per_epoch = len(dataset) // args.global_batch_size  
+        start_epoch = train_steps // steps_per_epoch  
+        skip_epoch_steps =  train_steps % steps_per_epoch
         del checkpoint
         logger.info(f"Resume training from checkpoint: {args.gpt_ckpt}")
         logger.info(f"Initial state: steps={train_steps}, epochs={start_epoch}")
     else:
         train_steps = 0
         start_epoch = 0
+        skip_epoch_steps =0
 
     if not args.no_compile:
         logger.info("compiling the model... (may take several minutes)")
@@ -406,19 +439,28 @@ def main(args):
                 dir=str(args.results_dir),
                 job_type="training",
                 reinit=True)
+    qformer_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
+    qformer_tokenizer.add_special_tokens({"bos_token": "[DEC]"})
     logger.info(f"Training for {args.epochs} epochs...")
     for epoch in range(start_epoch, args.epochs):
         sampler.set_epoch(epoch)
         # images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids  
         logger.info(f"Beginning epoch {epoch}...")
-        
+        current_step = 0 
         for sample in tqdm(loader):
+
+            if current_step < skip_epoch_steps:  
+                current_step += 1  
+                continue  # Skip processing of this sample and move to the next  
+            elif current_step == skip_epoch_steps and skip_epoch_steps > 0:
+                skip_epoch_steps == 0
+            current_step += 1  
             # logger.info(f"Training {train_steps} steps...")
             if args.use_vision_tower:
                 if args.subject_driven:
-                    x, pixel_values, c_indices, cond_attn_mask, image_masks, valid, text_input_ids, text_attention_mask = sample
+                    x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid, text_input_ids, text_attention_mask = sample
                 else:
-                    x, pixel_values, c_indices, cond_attn_mask, image_masks, valid = sample
+                    x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid = sample
                 
                 x = x.to(device, non_blocking=True)
                 pixel_values = pixel_values.to(device, non_blocking=True)
@@ -522,6 +564,7 @@ def main(args):
                             image_place_holder=args.image_place_holder,
                             processor_path=args.processor_path,
                             max_seq_length=args.cls_token_num,
+                            multimodal_encoder=args.multimodal_encoder
 
                         )
 
@@ -533,13 +576,13 @@ def main(args):
 
                         eval_model = eval_model.to(device, ptdtype, non_blocking=True)
                         eval_model.eval()
-                        for idx, patch in enumerate(tqdm(val_loader)):  
+                        for eval_idx, patch in enumerate(tqdm(val_loader)):  
                             if args.subject_driven:
-                                eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks, eval_valid, pixual_value_source, text_input_ids, text_attention_mask = patch
+                                eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks,eval_gt_img, eval_valid, pixual_value_source, text_input_ids, text_attention_mask = patch
                                 text_input_ids = text_input_ids.to(device, non_blocking=True)
                                 text_attention_mask = text_attention_mask.to(device, non_blocking=True)
                             else:
-                                eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks, eval_valid, pixual_value_source = patch
+                                eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks,eval_gt_img, eval_valid, pixual_value_source = patch
                                 text_input_ids = None
                                 text_attention_mask = None
                             eval_x = eval_x.to(device,ptdtype, non_blocking=True)
@@ -574,7 +617,7 @@ def main(args):
                                 new_caption_embs, new_emb_masks = caption_embs, emb_masks
                             new_c_indices = new_caption_embs * new_emb_masks[:,:, None]
                             c_emb_masks = new_emb_masks
-                            qzshape = [len(c_indices), args.codebook_embed_dim, latent_size, latent_size]
+                            qzshape = [len(new_c_indices), args.codebook_embed_dim, latent_size, latent_size]
                             index_sample = generate(
                                 eval_model, new_c_indices, latent_size ** 2,
                                 c_emb_masks,
@@ -585,44 +628,54 @@ def main(args):
                             samples = vq_model.decode_code(index_sample, qzshape)
                             eval_dir = f"{checkpoint_dir}/eval_step_{train_steps}"
                             os.makedirs(eval_dir, exist_ok=True)
-                            sample_save_path = f"{eval_dir}/batch_{idx}_cfg_{args.cfg_scale}_topk_{args.top_k}.png"
+                            sample_save_path = f"{eval_dir}/batch_{eval_idx}_cfg_{args.cfg_scale}_topk_{args.top_k}.png"
+                            upload_path = f"{eval_dir}/batch_0_cfg_{args.cfg_scale}_topk_{args.top_k}.png"
                             ori_save_path = f"{eval_dir}/ori.png"
-                            sample_text = eval_model.multimodel_processor.tokenizer.batch_decode(eval_c_indices, skip_special_tokens=True)
+                            sample_text = eval_model.multimodal_processor.tokenizer.batch_decode(eval_c_indices, skip_special_tokens=True)
+
+
+                            if text_input_ids is not None and args.subject_driven:
+                                subject_text = qformer_tokenizer.batch_decode(text_input_ids, skip_special_tokens=True)
 
                             try:
                                 if not args.stage2:
                                     p_values = eval_pixel_values[:,0] if len(eval_pixel_values.shape) == 5  else eval_pixel_values
                                 else:
                                     p_values = pixual_value_source[:,0] if len(pixual_value_source.shape) == 5  else pixual_value_source
+                                gt_values = eval_gt_img[:,0] if len(eval_gt_img.shape) == 5  else eval_gt_img
 
 
-                                pixel_values_img_list = postprocess(p_values, mean=eval_model.multimodel_processor.image_processor.image_mean,
-                                                               std=eval_model.multimodel_processor.image_processor.image_std)
 
+                                pixel_values_img_list = postprocess(p_values, mean=eval_model.multimodal_processor.image_processor.image_mean,
+                                                               std=eval_model.multimodal_processor.image_processor.image_std)
+                                eval_gt_img_list = postprocess(gt_values, mean=eval_model.multimodal_processor.image_processor.image_mean,
+                                                                std=eval_model.multimodal_processor.image_processor.image_std)
                                 transformed_images = [transform(img.resize(
-                                    (args.image_size, args.image_size), Image.LANCZOS)) for img in pixel_values_img_list]
+                                    (args.image_size, args.image_size), Image.LANCZOS)) for img in pixel_values_img_list] # input images
                                 transformed_images = torch.stack(transformed_images)
+                                transformed_gt_imgs = [transform(img.resize(
+                                    (args.image_size, args.image_size), Image.LANCZOS)) for img in eval_gt_img_list] # input images
+                                transformed_gt_imgs = torch.stack(transformed_gt_imgs)
                                 samples = samples.to(transformed_images.device)
 
+                                if text_input_ids is not None and args.subject_driven:
+                                    text_images_tensors = [
+                                        transform(text_to_image(text+f" ## subject: {sbj}", args.image_size, args.image_size ))
+                                        for sbj, text in zip(subject_text,sample_text)
+                                    ]
+                                else:
 
-                                text_images_tensors = [
-                                    transform(text_to_image(text, args.image_size, args.image_size ))
-                                    for  text in sample_text
-                                ]
+                                    text_images_tensors = [
+                                        transform(text_to_image(text, args.image_size, args.image_size ))
+                                        for  text in sample_text
+                                    ]
 
                                 text_images_tensors = torch.stack(text_images_tensors)
 
 
-                                images_to_save = torch.cat((text_images_tensors,transformed_images, samples), dim=0)
-                                save_image(images_to_save, sample_save_path, nrow=x.size(0), normalize=True,
+                                images_to_save = torch.cat((text_images_tensors,transformed_images, samples, transformed_gt_imgs), dim=0) # input text, input images, generated images, ground truth images
+                                save_image(images_to_save, sample_save_path, nrow=eval_x.size(0), normalize=True,
                                            value_range=(-1, 1))
-
-                                wandb.log(
-                                    {"eval_samples": wandb.Image(sample_save_path) },
-                                    step=train_steps,
-                                )
-
-
                             except Exception as e:
                             # If `samples` is a tensor: collect ori_images tensors
                                 print(e)
@@ -633,7 +686,10 @@ def main(args):
                                 save_image(img_denormalized, ori_save_path, nrow=img_denormalized.shape[0])
 
                                 save_image(samples, sample_save_path, nrow=samples.shape[0], normalize=True, value_range=(-1, 1))
-
+                        wandb.log(
+                            {"eval_samples": wandb.Image(upload_path) },
+                            step=train_steps,
+                        )
 
                         # dist.barrier()
                         # model.train()
@@ -763,6 +819,13 @@ if __name__ == "__main__":
 
     # subject driven
     parser.add_argument("--subject_driven", action='store_true')
+
+    parser.add_argument("--load_subject_embedding", type=str, default=None)
+
+    parser.add_argument("--reference_data_path", type=str, default=None)
+
+    # 
+    parser.add_argument("--multimodal_encoder", type=str, default="blip")
 
 
     args = parser.parse_args()

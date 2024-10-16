@@ -7,7 +7,9 @@ import numpy as np
 from nltk.corpus import stopwords
 import io
 import base64
+from transformers import BertTokenizer
 from openai import images
+import cv2 
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
@@ -187,6 +189,30 @@ class TextImg2ImgDataset(Dataset):
         self.image_only_rate = image_only_rate
         self.with_image_only = with_image_only
 
+        if args.reference_data_path is not None:
+            def load_reference_images(reference_data_path):  
+                with open(reference_data_path, 'r') as file:  
+                    return [json.loads(line) for line in file]  
+            self.reference_images = load_reference_images(args.reference_data_path)
+
+    def get_random_background(self, reference_images, ori_image_size):  
+        random_reference = np.random.choice(reference_images)  
+        background_image_path = random_reference['input_image']  
+        background_image = Image.open(background_image_path)  
+        return self.central_crop_and_resize(background_image, ori_image_size)  
+
+    def central_crop_and_resize(self,image, target_size):  
+        width, height = image.size  
+        min_dim = min(width, height)  
+        left = (width - min_dim) / 2  
+        top = (height - min_dim) / 2  
+        right = (width + min_dim) / 2  
+        bottom = (height + min_dim) / 2  
+        
+        image = image.crop((left, top, right, bottom))  
+        image = image.resize(target_size, Image.Resampling.LANCZOS)  
+        return image  
+
     def __len__(self):
         return len(self.img_path_list)
 
@@ -209,31 +235,71 @@ class TextImg2ImgDataset(Dataset):
         valid = 1
 
         img_path = each['image_path']
-        source_image = each['source_image']
+        source_path = each['source_image']
         input_text = each['input_text']
+        input_text = input_text.replace(self.args.image_place_holder, self.image_place_holder)
         if 'objects' in each:
             objects = each['objects']
             qformer_inputs = self.qformer_tokenizer(objects, return_tensors="pt", padding=True) 
             text_input_ids = qformer_inputs['input_ids'].squeeze(0)
             text_attention_mask = qformer_inputs['attention_mask'].squeeze(0)
+            # input_text = f"The {objects} is "+input_text
+            input_text = f"The {objects} in {self.image_place_holder}."  
 
-        input_text = input_text.replace(self.args.image_place_holder, self.image_place_holder)
+
+
 
         if self.with_image_only:
             input_text_replace = "The image 0 is {}\n".format(self.image_place_holder)
             # replace by the image replace rate
             if random.random() <= self.image_only_rate:
                 input_text = input_text_replace
+        if 'objects' in each:
+            
+            mask = Image.open(img_path).convert('L')  
+            mask_array = np.array(mask) 
+            mask_area = np.sum(mask_array > 0)  
 
-        try:
-            img = Image.open(img_path).convert("RGB")
-            if min(img.size) < self.image_size:
+            # img = self.load_image(source_path)  # ground truth image
+            # ori_image_area = img.size[0] * img.size[1]
+
+            source_image = self.load_image(source_path)  # input ori image
+
+            ori_image_area = source_image.size[0] * source_image.size[1]
+            try:
+                if mask_area >= 0.10 * ori_image_area and mask_area <= 0.95 * ori_image_area:  
+                    # segmented_image = np.array(img) * (mask_array[:, :, None] > 0)  
+                    segmented_image = np.array(source_image) * (mask_array[:, :, None] > 0)  
+                    segmented_image = Image.fromarray(segmented_image)  
+                    img = segmented_image # segmented mask image
+                    # random_background = self.get_random_background(self.reference_images, img.size)  
+                    # source_image = Image.composite(segmented_image, random_background, Image.fromarray(mask_array))   # input for BLIP model
+                    # save in disk named after time
+                    # from datetime import datetime  
+                    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S%f")  
+                    # filename = f"{timestamp}.jpg"  
+                    # img.save(f"/nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject/{filename}")
+                    # source_image.save(f"/nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject/{timestamp}_source.jpg")
+                else:
+                    img, valid = self.dummy_data()
+            except Exception as e:
+                print(e)
+                import traceback
+                traceback.print_exc()
                 img, valid = self.dummy_data()
-        except:
-            img, valid = self.dummy_data()
+        else:
+            try:
+                img = Image.open(img_path).convert("RGB")
+                if min(img.size) < self.image_size:
+                    img, valid = self.dummy_data()
+            except:
+                img, valid = self.dummy_data()
 
-        source_image = self.load_image(source_image) if isinstance(source_image, str) else [self.load_image(each) for
-                                                                                            each in source_image]
+            source_image = self.load_image(source_path) if isinstance(source_path, str) else [self.load_image(each) for
+                                                                                                each in source_path]
+        if not valid:
+            source_image = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255))
+
         process_data = self.processor(
             images=source_image,
             max_length=self.t5_feature_max_len,
@@ -256,10 +322,18 @@ class TextImg2ImgDataset(Dataset):
 
 
         image_mask = torch.ones((pixel_values.shape[1]), dtype=torch.bool)
-        if self.transform is not None and valid == 1:
-            img = self.transform(img)
 
-        common_items = [img, pixel_values, cond_idx, attention_mask, image_mask, torch.tensor(valid)]  
+        if self.transform is not None and valid == 1:
+            img = img.convert('RGB') 
+            img_tensor = self.transform(img)
+            img_pixel = self.processor.image_processor(images = img,return_tensors="pt", do_rescale=True ).pixel_values
+        else:
+            img_tensor = img
+            img_pixel = self.processor.image_processor(images = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255)),return_tensors="pt", do_rescale=True ).pixel_values 
+        
+        
+
+        common_items = [img_tensor, pixel_values, cond_idx, attention_mask, image_mask, img_pixel,torch.tensor(valid)]  
 
 
         if 'objects' in each:  
