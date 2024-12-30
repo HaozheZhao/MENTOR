@@ -162,7 +162,7 @@ import random
 
 
 class TextImg2ImgDataset(Dataset):
-    def __init__(self, args, transform, data_path, processor, max_samples=-1, is_val=False, with_image_only=False,
+    def __init__(self, args, transform, data_path, processor, max_samples=-1, is_val=False, dreambench_eval=False,with_image_only=False,
                  image_only_rate=0.6):
         img_path_list = load_jsonl(data_path)
 
@@ -173,6 +173,8 @@ class TextImg2ImgDataset(Dataset):
             self.img_path_list = random.sample(self.img_path_list, max_samples)
         self.transform = transform
         self.processor = processor
+        self.processor.tokenizer.padding_side = "right"  # 设置填充到右侧
+        self.processor.tokenizer.truncation_side = "right"  # 设置截断到右侧
         self.qformer_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
         self.qformer_tokenizer.add_special_tokens({"bos_token": "[DEC]"})
         self.args = args
@@ -185,6 +187,7 @@ class TextImg2ImgDataset(Dataset):
         self.max_seq_length = self.t5_feature_max_len + self.code_len
 
         self.is_val = is_val
+        self.dreambench_eval = dreambench_eval
 
         self.image_only_rate = image_only_rate
         self.with_image_only = with_image_only
@@ -213,6 +216,45 @@ class TextImg2ImgDataset(Dataset):
         image = image.resize(target_size, Image.Resampling.LANCZOS)  
         return image  
 
+    def random_transform(self, image, mask, background_size):
+        bg_width, bg_height = background_size
+
+        # 获取对象的初始尺寸
+        obj_width, obj_height = image.size
+
+        # 计算允许的最大缩放比例，确保对象在缩放和旋转后仍能放入背景中
+        max_scale = min(bg_width / obj_width, bg_height / obj_height)
+
+        # 设置缩放范围，可以根据需要调整
+        min_scale = max(0.5, max_scale * 0.5)  # 最小缩放为允许最大缩放的一半，且不小于0.5
+        scale = random.uniform(min_scale, max_scale)
+
+        # 缩放对象和遮罩
+        new_width = int(obj_width * scale)
+        new_height = int(obj_height * scale)
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        mask = mask.resize((new_width, new_height), Image.Resampling.NEAREST)
+
+        # 旋转角度，确保对象仍在背景内，需要限制旋转角度
+        angle = random.uniform(-10, 10)  # 旋转角度在-10到10度之间
+
+        # 旋转对象和遮罩
+        image = image.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+        mask = mask.rotate(angle, resample=Image.Resampling.NEAREST, expand=True)
+
+        # 获取旋转后对象的尺寸
+        rotated_width, rotated_height = image.size
+
+        # 如果旋转后对象尺寸超过背景尺寸，重新调整缩放比例
+        if rotated_width > bg_width or rotated_height > bg_height:
+            scale_factor = min(bg_width / rotated_width, bg_height / rotated_height) * 0.9  # 缩小一点
+            new_width = int(rotated_width * scale_factor)
+            new_height = int(rotated_height * scale_factor)
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            mask = mask.resize((new_width, new_height), Image.Resampling.NEAREST)
+
+        return image, mask
+
     def __len__(self):
         return len(self.img_path_list)
 
@@ -237,14 +279,30 @@ class TextImg2ImgDataset(Dataset):
         img_path = each['image_path']
         source_path = each['source_image']
         input_text = each['input_text']
+        generation_only = each['generation_only'] if 'generation_only' in each else False
+        do_replace = each['do_replace'] if 'do_replace' in each else True
+        do_mask = each['do_mask'] if 'do_mask' in each else False
         input_text = input_text.replace(self.args.image_place_holder, self.image_place_holder)
         if 'objects' in each:
-            objects = each['objects']
-            qformer_inputs = self.qformer_tokenizer(objects, return_tensors="pt", padding=True) 
-            text_input_ids = qformer_inputs['input_ids'].squeeze(0)
-            text_attention_mask = qformer_inputs['attention_mask'].squeeze(0)
-            # input_text = f"The {objects} is "+input_text
-            input_text = f"The {objects} in {self.image_place_holder}."  
+            objects = each['objects'] 
+            if objects is None:
+                text_input_ids, text_attention_mask = None, None
+            else:
+                qformer_inputs = self.qformer_tokenizer(objects, return_tensors="pt", padding=True) 
+                text_input_ids = qformer_inputs['input_ids'].squeeze(0)
+                text_attention_mask = qformer_inputs['attention_mask'].squeeze(0)
+                # input_text = f"The {objects} is "+input_text
+                if self.args.do_recovery:
+                    if do_mask:
+                        input_text = f"The {objects} in {self.image_place_holder}."
+                    else:
+                        input_text = input_text.replace(self.image_place_holder, "")
+                        input_text = f"The {objects} is {self.image_place_holder}.\n{input_text}. "
+                    # input_text = f"{self.image_place_holder}\n {input_text}."
+                    # input_text = f"{input_text}.\n The {objects} is in {self.image_place_holder}."
+
+                else:
+                    input_text = f"The {objects} in {self.image_place_holder}."
 
 
 
@@ -260,28 +318,75 @@ class TextImg2ImgDataset(Dataset):
             mask_array = np.array(mask) 
             mask_area = np.sum(mask_array > 0)  
 
-            # img = self.load_image(source_path)  # ground truth image
-            # ori_image_area = img.size[0] * img.size[1]
+            if self.args.do_recovery:
+                img = self.load_image(source_path)  # ground truth image is source_image; the input text should be the caption of the source_image
+                ori_image_area = img.size[0] * img.size[1]
+            else:
+                source_image = self.load_image(source_path)  # input ori image
 
-            source_image = self.load_image(source_path)  # input ori image
-
-            ori_image_area = source_image.size[0] * source_image.size[1]
+                ori_image_area = source_image.size[0] * source_image.size[1]
             try:
-                if mask_area >= 0.10 * ori_image_area and mask_area <= 0.95 * ori_image_area:  
-                    # segmented_image = np.array(img) * (mask_array[:, :, None] > 0)  
+                # segmented_image = np.array(img) * (mask_array[:, :, None] > 0)  
+                if self.args.do_recovery:
+                    if self.dreambench_eval and self.is_val:
+                        source_image = Image.open(img_path)
+                    else:
+                        if do_mask:
+                            source_image = self.load_image(source_path)  # input ori image
+                            ori_image_area = source_image.size[0] * source_image.size[1]
+                            segmented_image = np.array(source_image) * (mask_array[:, :, None] > 0)  
+                            segmented_image = Image.fromarray(segmented_image)  
+                            img = segmented_image # segmented mask image
+                        elif do_replace:
+                            mask_image = Image.fromarray(np.uint8(mask_array), mode='L')
+
+                            # mask_array = (mask_array * 255).astype(np.uint8)  # 确保遮罩在0-255范围内
+
+                            # 创建分割对象图像
+                            segmented_array = np.array(img) * (mask_array[:, :, None] > 0)
+                            segmented_image = Image.fromarray(segmented_array.astype(np.uint8))
+
+                            # 获取随机背景
+                            random_background = self.get_random_background(self.reference_images, img.size)
+                            bg_width, bg_height = random_background.size
+
+                            segmented_image_transformed, mask_image_transformed = self.random_transform(segmented_image, mask_image, (bg_width, bg_height))
+
+                            # 获取变换后对象的尺寸
+                            obj_width, obj_height = segmented_image_transformed.size
+
+                            # 计算允许的最大偏移，确保对象完全位于背景内
+                            max_x = bg_width - obj_width
+                            max_y = bg_height - obj_height
+
+                            # 确保偏移不为负
+                            max_x = max(0, max_x)
+                            max_y = max(0, max_y)
+
+                            # 随机位置放置对象
+                            x = random.randint(0, max_x)
+                            y = random.randint(0, max_y)
+
+                            # 创建组合图像
+                            source_image = random_background.copy()
+                            source_image.paste(segmented_image_transformed, (x, y), mask_image_transformed)
+                            # segmented_image = Image.fromarray(np.uint8(segmented_image))  
+                            # source_image = Image.composite(segmented_image, random_background, mask_image)   # input for BLIP model
+                        else:
+                            source_image = self.load_image(img_path) if isinstance(img_path, str) else [self.load_image(each) for
+                                                                                                each in img_path]
+                       
+                else:
                     segmented_image = np.array(source_image) * (mask_array[:, :, None] > 0)  
                     segmented_image = Image.fromarray(segmented_image)  
                     img = segmented_image # segmented mask image
-                    # random_background = self.get_random_background(self.reference_images, img.size)  
-                    # source_image = Image.composite(segmented_image, random_background, Image.fromarray(mask_array))   # input for BLIP model
-                    # save in disk named after time
-                    # from datetime import datetime  
-                    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S%f")  
-                    # filename = f"{timestamp}.jpg"  
-                    # img.save(f"/nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject/{filename}")
-                    # source_image.save(f"/nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject/{timestamp}_source.jpg")
-                else:
-                    img, valid = self.dummy_data()
+
+                # save in disk named after time
+                # from datetime import datetime  
+                # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S%f")  
+                # filename = f"{timestamp}.jpg"  
+                # img.save(f"/nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject/{filename}")
+                # source_image.save(f"/nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject/{timestamp}_source.jpg")
             except Exception as e:
                 print(e)
                 import traceback
@@ -323,6 +428,10 @@ class TextImg2ImgDataset(Dataset):
 
         image_mask = torch.ones((pixel_values.shape[1]), dtype=torch.bool)
 
+        if generation_only:
+            pixel_values = None
+            image_mask = None
+
         if self.transform is not None and valid == 1:
             img = img.convert('RGB') 
             img_tensor = self.transform(img)
@@ -332,7 +441,7 @@ class TextImg2ImgDataset(Dataset):
             img_pixel = self.processor.image_processor(images = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255)),return_tensors="pt", do_rescale=True ).pixel_values 
         
         
-
+        # img/img_tensor GT; pixel_values INPUT
         common_items = [img_tensor, pixel_values, cond_idx, attention_mask, image_mask, img_pixel,torch.tensor(valid)]  
 
 
@@ -577,11 +686,11 @@ def build_t2i_code(args):
     return Text2ImgDatasetCode(args)
 
 
-def build_ti2i(args, transform, data_path, processor, max_samples=-1, is_val=False, with_image_only=False,
+def build_ti2i(args, transform, data_path, processor, max_samples=-1, is_val=False, dreambench_eval=False, with_image_only=False,
                image_only_rate=0.6, stage2 =False):
 
     if not stage2:
-        return TextImg2ImgDataset(args, transform, data_path, processor, max_samples=max_samples, is_val=is_val,
+        return TextImg2ImgDataset(args, transform, data_path, processor, max_samples=max_samples, is_val=is_val,dreambench_eval=dreambench_eval,
                               with_image_only=with_image_only, image_only_rate=image_only_rate)
     else:
         return TextImg2ImgStage2Dataset(args, transform, data_path, processor, max_samples=max_samples, is_val=is_val,

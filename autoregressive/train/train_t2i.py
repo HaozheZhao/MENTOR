@@ -208,39 +208,53 @@ def main(args):
         images = torch.stack(images)  
 
         # Identify the maximum number of images in the batch for padding purposes  
-        max_num_of_images = max(pv.shape[1] for pv in pixel_values_list)
+        is_generated = torch.tensor([1 if each is not None else 0 for each in pixel_values_list], dtype=torch.bool)
+        pixel_values_list = [ each  for each in pixel_values_list if each is not None]
+        if len(pixel_values_list) == 0:
+            pixel_values = None
+        else:
+            max_num_of_images = max(pv.shape[1] for pv in pixel_values_list)
 
-        # Pad and stack pixel_values  
-        padded_pixel_values = []  
-        for pv in pixel_values_list:  
-            num_of_images = pv.shape[1]
-            # Calculate padding required  
-            padding_needed = max_num_of_images - num_of_images  
-            # Pad the tensor to the desired size  
-            # Padding size format: (lastdim_pad_before, lastdim_pad_after, ..., firstdim_pad_before, firstdim_pad_after)  
-            # padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0, 0, padding_needed), "constant", 0)
-            padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0,padding_needed, 0),
-                                                "constant", 0)
-            padded_pixel_values.append(padded_pv)  
-        
-        # Stack all padded pixel_values into a single tensor
-        # for each in padded_pixel_values:
-        #     logger.info("each shape: {}".format(each.shape))
-        pixel_values = torch.concat(padded_pixel_values)  
+            # Pad and stack pixel_values  
+            padded_pixel_values = []  
+            for pv in pixel_values_list:  
+                num_of_images = pv.shape[1]
+                # Calculate padding required  
+                padding_needed = max_num_of_images - num_of_images  
+                # Pad the tensor to the desired size  
+                # Padding size format: (lastdim_pad_before, lastdim_pad_after, ..., firstdim_pad_before, firstdim_pad_after)  
+                # padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0, 0, padding_needed), "constant", 0)
+                padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0,padding_needed, 0),
+                                                    "constant", 0)
+                padded_pixel_values.append(padded_pv)  
+            
+            # Stack all padded pixel_values into a single tensor
+            # for each in padded_pixel_values:
+            #     logger.info("each shape: {}".format(each.shape))
+            pixel_values = torch.concat(padded_pixel_values)  
         
         cond_idxs_padded = pad_sequence(cond_idxs, batch_first=True, padding_value=0)  
         attention_masks_padded = pad_sequence(attention_masks, batch_first=True, padding_value=0)  
 
         # Pad image masks with `False` as padding value  
-        padded_image_masks = pad_sequence(image_masks, batch_first=True, padding_value=False)  
+        image_masks = [each for each in image_masks if each is not None]
+        if len(image_masks) == 0:
+            padded_image_masks = None
+        else:
+            padded_image_masks = pad_sequence(image_masks, batch_first=True, padding_value=False)  
 
         # Stack valid flags  
         valids = torch.stack(valids)  
 
         if expected_length == 9 or expected_length == 10:
-            text_input_ids_padded = pad_sequence(text_input_ids, batch_first=True, padding_value=0)
-            text_attention_mask_padded = pad_sequence(text_attention_mask, batch_first=True, padding_value=0)
-        
+            text_input_ids = [each for each in text_input_ids if each is not None]
+            text_attention_mask = [each for each in text_attention_mask if each is not None]
+            if len(text_input_ids) == 0:
+                text_input_ids_padded, text_attention_mask_padded = None, None
+            else:
+                text_input_ids_padded = pad_sequence(text_input_ids, batch_first=True, padding_value=0)
+                text_attention_mask_padded = pad_sequence(text_attention_mask, batch_first=True, padding_value=0)
+            
         # print(f"images shape: {images.shape}")
         # print(f"pixel_values shape: {pixel_values.shape}")
         # print(f"cond_idxs_padded shape: {cond_idxs_padded.shape}")
@@ -259,14 +273,23 @@ def main(args):
         valids_bool = valids.bool()
 
         if valids_bool.sum() > 0:
-            common_items = [images[valids_bool], pixel_values[valids_bool], cond_idxs_padded[valids_bool], attention_masks_padded[valids_bool], padded_image_masks[valids_bool],img_pixel[valids_bool], valids[valids_bool]]  
+            valid_pixel_values = pixel_values[valids_bool[is_generated] ] if pixel_values is not None else None
+            valid_padded_image_masks = padded_image_masks[valids_bool[is_generated] ] if padded_image_masks is not None else None
+                
+            
+            common_items = [images[valids_bool], valid_pixel_values , cond_idxs_padded[valids_bool], attention_masks_padded[valids_bool], valid_padded_image_masks ,img_pixel[valids_bool], valids[valids_bool]]  
+
+            if expected_length == 9 or expected_length == 10:
+                
+                valid_text_input_ids_padded = text_input_ids_padded[valids_bool[is_generated] ] if text_input_ids_padded is not None else None
+                valid_text_attention_mask_padded= text_attention_mask_padded[valids_bool[is_generated] ] if text_attention_mask_padded is not None else None
 
             if expected_length == 8:
                 common_items.extend([pixel_source[valids_bool]])
             elif expected_length == 9:
-                common_items.extend([text_input_ids_padded[valids_bool], text_attention_mask_padded[valids_bool]])
+                common_items.extend([valid_text_input_ids_padded, valid_text_attention_mask_padded])
             elif expected_length == 10:
-                common_items.extend([pixel_source[valids_bool], text_input_ids_padded[valids_bool], text_attention_mask_padded[valids_bool]])
+                common_items.extend([pixel_source[valids_bool], valid_text_input_ids_padded, valid_text_attention_mask_padded ])
         else:
             common_items = [images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks,img_pixel, valids]  
 
@@ -333,7 +356,7 @@ def main(args):
 
 
     if args.do_eval:
-        val_dataset = build_dataset(args, transform=transform, data_path = args.val_data_path, processor = model.multimodal_processor, max_samples = args.max_eval_samples,is_val = True, with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
+        val_dataset = build_dataset(args, transform=transform, data_path = args.val_data_path, processor = model.multimodal_processor, max_samples = args.max_eval_samples,is_val = True,dreambench_eval=args.dreambench_eval, with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
         val_sampler = DistributedSampler(
             val_dataset,
             num_replicas=dist.get_world_size(),
@@ -374,15 +397,32 @@ def main(args):
         
     if args.gpt_ckpt:
         checkpoint = torch.load(args.gpt_ckpt, map_location="cpu")
-        model.load_state_dict(checkpoint["model"], strict=True)
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-        train_steps = checkpoint["steps"] if "steps" in checkpoint else int(args.gpt_ckpt.split('/')[-1].split('.')[0])
-        steps_per_epoch = len(dataset) // args.global_batch_size  
-        start_epoch = train_steps // steps_per_epoch  
-        skip_epoch_steps =  train_steps % steps_per_epoch
+        if args.load_visual_encoder:
+            state_dict = {}
+            for k,v in checkpoint['model'].items():
+                if "multimodal_encoder" in k:
+                    state_dict[k] = v
+
+            reuslt = model.load_state_dict(state_dict, strict=False)
+            print(f"loading visual encoder from CKPT {args.gpt_ckpt}, loading result is : {result}")
+        else:
+            model.load_state_dict(checkpoint["model"], strict=True)
+        if args.resume:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            train_steps = checkpoint["steps"] if "steps" in checkpoint else int(args.gpt_ckpt.split('/')[-1].split('.')[0])
+            steps_per_epoch = len(dataset) // args.global_batch_size  
+            start_epoch = train_steps // steps_per_epoch  
+            skip_epoch_steps =  train_steps % steps_per_epoch
+            logger.info(f"Resume training from checkpoint: {args.gpt_ckpt}")
+
+        else:
+            logger.info(f"### LOAD  pretraining weights from checkpoint: {args.gpt_ckpt}")
+            train_steps = 0
+            start_epoch = 0
+            skip_epoch_steps =0
+
         del checkpoint
-        logger.info(f"Resume training from checkpoint: {args.gpt_ckpt}")
         logger.info(f"Initial state: steps={train_steps}, epochs={start_epoch}")
     else:
         train_steps = 0
@@ -392,9 +432,12 @@ def main(args):
     if not args.no_compile:
         logger.info("compiling the model... (may take several minutes)")
         model = torch.compile(model) # requires PyTorch 2.0
+    for para in model.parameters():
+        para.requires_grad = True
+
     if args.use_vision_tower:
         logger.info(f"freeze the vit")
-        for para in model.multimodal_encoder.parameters():
+        for para in model.multimodal_encoder.vision_model.parameters():
             para.requires_grad = False
 
         if args.train_text_encoder:
@@ -402,12 +445,31 @@ def main(args):
 
             for para in model.multimodal_encoder.language_projection.parameters():
                 para.requires_grad = True
-            if args.subject_driven and not args.stage2:
+            if args.subject_driven and not args.stage2 and not args.do_recovery: # freeze t5, train the rest
                 for para in model.multimodal_encoder.language_model.parameters():
                     para.requires_grad = False
-            else:
-                for para in model.multimodal_encoder.language_model.parameters():
-                    para.requires_grad = True
+                for para in model.multimodal_encoder.language_projection.parameters():
+                    para.requires_grad = False
+                for para in model.layers.parameters():
+                    para.requires_grad = False
+                for para in model.cls_embedding.parameters():
+                    para.requires_grad = False
+                # for para in model.norm.parameters():
+                #     para.requires_grad = False
+                # for para in model.output.parameters():
+                #     para.requires_grad = False
+            # if args.do_recovery:
+            #     for para in model.multimodal_encoder.qformer.parameters():
+            #         para.requires_grad = False
+            # elif args.subject_driven and args.do_recovery: 
+            #     for para in model.multimodal_encoder.language_model.parameters():
+            #         para.requires_grad = True
+            #     for keys, param in model.named_parameters(): 
+            #         if "multimodal_encoder" not in keys:
+            #             param.requires_grad = True
+            # else:
+            #     for para in model.multimodal_encoder.language_model.parameters():
+            #         para.requires_grad = True
 
     all_param = 0
     trained_param=0
@@ -416,11 +478,10 @@ def main(args):
         if param.requires_grad ==True:
             trained_param+=param.numel()
     total_param = all_param
-
     logger.info('***** total param is {} *****'.format(total_param))
     logger.info('***** total trained param is {} *****'.format(trained_param))
     model.cuda(torch.cuda.current_device())
-    model = DDP(model, device_ids=[args.gpu])
+    model = DDP(model, device_ids=[args.gpu],find_unused_parameters=args.find_unused_parameters)
     model.train()  # important! This enables embedding dropout for classifier-free guidance
 
     ptdtype = {'none': torch.float32, 'bf16': torch.bfloat16, 'fp16': torch.float16}[args.mixed_precision]
@@ -429,6 +490,8 @@ def main(args):
     # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
+    gradient_accumulation_steps = args.gradient_accumulation_steps
+    accumulation_step = 0  # Counter for accumulation steps
     start_time = time.time()
     if torch.distributed.get_rank() == 0:
         print('initializing wandb')
@@ -442,6 +505,7 @@ def main(args):
     qformer_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
     qformer_tokenizer.add_special_tokens({"bos_token": "[DEC]"})
     logger.info(f"Training for {args.epochs} epochs...")
+
     for epoch in range(start_epoch, args.epochs):
         sampler.set_epoch(epoch)
         # images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, valids  
@@ -449,7 +513,7 @@ def main(args):
         current_step = 0 
         for sample in tqdm(loader):
 
-            if current_step < skip_epoch_steps:  
+            if current_step < skip_epoch_steps and epoch<= start_epoch:  
                 current_step += 1  
                 continue  # Skip processing of this sample and move to the next  
             elif current_step == skip_epoch_steps and skip_epoch_steps > 0:
@@ -463,10 +527,11 @@ def main(args):
                     x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid = sample
                 
                 x = x.to(device, non_blocking=True)
-                pixel_values = pixel_values.to(device, non_blocking=True)
+                if pixel_values is not None:
+                    pixel_values = pixel_values.to(device, non_blocking=True)
+                    image_masks = image_masks.to(device, non_blocking=True)
                 c_indices = c_indices.to(device, non_blocking=True)
                 cond_attn_mask = cond_attn_mask.to(device, non_blocking=True)
-                image_masks = image_masks.to(device, non_blocking=True)
                 if args.dataset == 't2i' or args.dataset == 'ti2i':
                     img = x
                     with torch.no_grad():
@@ -502,19 +567,33 @@ def main(args):
             
  # backward pass, with gradient scaling if training in fp16         
             scaler.scale(loss).backward()
-            if args.max_grad_norm != 0.0:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-            # step the optimizer and scaler if training in fp16
-            scaler.step(optimizer)
-            scaler.update()
-            # flush the gradients as soon as we can, no need for this memory anymore
-            lr_scheduler.step()
+            loss = loss / gradient_accumulation_steps
+            accumulation_step += 1
+            if accumulation_step % gradient_accumulation_steps == 0:
+                if args.max_grad_norm != 0.0:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad(set_to_none=True)
 
-            optimizer.zero_grad(set_to_none=True)
+                # Step the learning rate scheduler
+                lr_scheduler.step()
+
+            # if args.max_grad_norm != 0.0:
+            #     scaler.unscale_(optimizer)
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            # # step the optimizer and scaler if training in fp16
+            # scaler.step(optimizer)
+            # scaler.update()
+            # # flush the gradients as soon as we can, no need for this memory anymore
+            # lr_scheduler.step()
+
+            # optimizer.zero_grad(set_to_none=True)
 
             # Log loss values:
-            running_loss += loss.item()
+            running_loss += loss.item() * gradient_accumulation_steps 
             log_steps += 1
             train_steps += 1
 
@@ -579,17 +658,22 @@ def main(args):
                         for eval_idx, patch in enumerate(tqdm(val_loader)):  
                             if args.subject_driven:
                                 eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks,eval_gt_img, eval_valid, pixual_value_source, text_input_ids, text_attention_mask = patch
-                                text_input_ids = text_input_ids.to(device, non_blocking=True)
-                                text_attention_mask = text_attention_mask.to(device, non_blocking=True)
+                                if text_input_ids is None:
+                                    text_input_ids = None
+                                    text_attention_mask = None
+                                else:
+                                    text_input_ids = text_input_ids.to(device, non_blocking=True)
+                                    text_attention_mask = text_attention_mask.to(device, non_blocking=True)
                             else:
                                 eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks,eval_gt_img, eval_valid, pixual_value_source = patch
                                 text_input_ids = None
                                 text_attention_mask = None
+                            if eval_pixel_values is not None:
+                                eval_pixel_values = eval_pixel_values.to(device, non_blocking=True)
+                                eval_image_masks = eval_image_masks.to(device, non_blocking=True)
                             eval_x = eval_x.to(device,ptdtype, non_blocking=True)
-                            eval_pixel_values = eval_pixel_values.to(device,ptdtype, non_blocking=True)
                             eval_c_indices = eval_c_indices.to(device, non_blocking=True)
                             eval_cond_attn_mask = eval_cond_attn_mask.to(device, non_blocking=True)
-                            eval_image_masks = eval_image_masks.to(device, non_blocking=True)
 
                             caption_embs = eval_model.get_multmodal_embeddings(
                                 pixel_values=eval_pixel_values,
@@ -628,9 +712,9 @@ def main(args):
                             samples = vq_model.decode_code(index_sample, qzshape)
                             eval_dir = f"{checkpoint_dir}/eval_step_{train_steps}"
                             os.makedirs(eval_dir, exist_ok=True)
-                            sample_save_path = f"{eval_dir}/batch_{eval_idx}_cfg_{args.cfg_scale}_topk_{args.top_k}.png"
-                            upload_path = f"{eval_dir}/batch_0_cfg_{args.cfg_scale}_topk_{args.top_k}.png"
-                            ori_save_path = f"{eval_dir}/ori.png"
+                            sample_save_path = f"{eval_dir}/batch_{eval_idx}_cfg_{args.cfg_scale}_topk_{args.top_k}.jpg"
+                            upload_path = f"{eval_dir}/batch_0_cfg_{args.cfg_scale}_topk_{args.top_k}.jpg"
+                            ori_save_path = f"{eval_dir}/ori.jpg"
                             sample_text = eval_model.multimodal_processor.tokenizer.batch_decode(eval_c_indices, skip_special_tokens=True)
 
 
@@ -827,6 +911,18 @@ if __name__ == "__main__":
     # 
     parser.add_argument("--multimodal_encoder", type=str, default="blip")
 
+    parser.add_argument("--do_recovery", action='store_true', default=False)
+
+    parser.add_argument("--no_replace", action='store_true', default=False)
+    
+
+    parser.add_argument("--resume", action='store_true', default=False)
+
+    parser.add_argument("--dreambench_eval", action='store_true', default=False)
+
+    parser.add_argument("--find_unused_parameters", action='store_true', default=False)
+    
+    parser.add_argument("--load_visual_encoder", action='store_true', default=False)
 
     args = parser.parse_args()
     main(args)

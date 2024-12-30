@@ -45,7 +45,8 @@ def creat_optimizer(model, weight_decay, learning_rate, betas, logger):
     # Create AdamW optimizer and use the fused version if it is available
     fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
     extra_args = dict(fused=True) if fused_available else dict()
-    optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+    # optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+    optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas)
     logger.info(f"using fused AdamW: {fused_available}")
     return optimizer
 

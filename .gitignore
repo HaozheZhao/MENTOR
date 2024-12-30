@@ -159,6 +159,13 @@ cython_debug/
 llamagen_t2i_stage3_subject_instructblip/
 llamagen_t2i_stage3_subject/
 *.jsonl
+*.jpg
+*.txt
+*.json
+*.wandb
+*.yaml
+wandb/
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

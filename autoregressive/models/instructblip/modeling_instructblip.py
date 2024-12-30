@@ -1415,6 +1415,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             if attention_mask is None:
                 attention_mask = torch.ones_like(input_ids)
             attention_mask = attention_mask.to(inputs_embeds.device)
+            vision_outputs = None
+            query_outputs = None
         else:
             if img_mask is None:
                 img_mask = torch.ones(pixel_values.shape[:2])
@@ -1481,6 +1483,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)
             return output
+        
         if self.config.use_vision_tower:
             return InstructBlipForConditionalGenerationModelOutput(
                 logits=logits,
