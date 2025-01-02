@@ -36,7 +36,7 @@ subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding_instructblip.pth"
 
 lr=1e-4
-num_workers=64
+num_workers=16
 
 nnodes=2
 nproc_per_node=8

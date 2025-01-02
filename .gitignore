@@ -165,7 +165,8 @@ llamagen_t2i_stage3_subject/
 *.wandb
 *.yaml
 wandb/
-
+*.pth
+*.bin
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
