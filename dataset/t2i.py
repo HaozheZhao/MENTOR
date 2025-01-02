@@ -8,7 +8,6 @@ from nltk.corpus import stopwords
 import io
 import base64
 from transformers import BertTokenizer
-from openai import images
 import cv2 
 import torch
 from torch.utils.data import Dataset
@@ -267,9 +266,14 @@ class TextImg2ImgDataset(Dataset):
 
     def load_image(self, img_path):
         try:
+            # 加载图像并转换为 RGB 模式
             img = Image.open(img_path).convert("RGB")
+            # 调整图像大小到指定的 self.image_size
+            img = img.resize((self.image_size, self.image_size), Image.BICUBIC)
             return img
-        except:
+        except Exception as e:
+            # 返回默认的白色图像，并打印错误信息
+            print(f"Error loading image {img_path}: {e}")
             return Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255))
 
     def __getitem__(self, index):
@@ -282,7 +286,7 @@ class TextImg2ImgDataset(Dataset):
         generation_only = each['generation_only'] if 'generation_only' in each else False
         do_replace = each['do_replace'] if 'do_replace' in each else True
         do_mask = each['do_mask'] if 'do_mask' in each else False
-        input_text = input_text.replace(self.args.image_place_holder, self.image_place_holder)
+        input_text = input_text.replace(self.args.image_place_holder, "").strip()
         if 'objects' in each:
             objects = each['objects'] 
             if objects is None:
@@ -293,17 +297,18 @@ class TextImg2ImgDataset(Dataset):
                 text_attention_mask = qformer_inputs['attention_mask'].squeeze(0)
                 # input_text = f"The {objects} is "+input_text
                 if self.args.do_recovery:
-                    if do_mask:
-                        input_text = f"The {objects} in {self.image_place_holder}."
+                    if generation_only:
+                        input_text =input_text.replace(self.args.image_place_holder, "")
                     else:
-                        input_text = input_text.replace(self.image_place_holder, "")
-                        input_text = f"The {objects} is {self.image_place_holder}.\n{input_text}. "
-                    # input_text = f"{self.image_place_holder}\n {input_text}."
-                    # input_text = f"{input_text}.\n The {objects} is in {self.image_place_holder}."
+                        if do_mask:
+                            input_text = f"The {objects} in {self.image_place_holder}."
+                        else:
+                            input_text = f"The {objects} is {self.image_place_holder}.\n{input_text}"
+                            # input_text = f"{self.image_place_holder}\n {input_text}."
+                            # input_text = f"{input_text}.\n The {objects} is in {self.image_place_holder}."
 
                 else:
                     input_text = f"The {objects} in {self.image_place_holder}."
-
 
 
 
@@ -404,7 +409,6 @@ class TextImg2ImgDataset(Dataset):
                                                                                                 each in source_path]
         if not valid:
             source_image = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255))
-
         process_data = self.processor(
             images=source_image,
             max_length=self.t5_feature_max_len,
@@ -458,7 +462,7 @@ class TextImg2ImgDataset(Dataset):
         return tuple(common_items)  
 
 
-from datasets import load_metric, concatenate_datasets, load_dataset
+from datasets import concatenate_datasets, load_dataset
 from datasets import Dataset as Huggingface_Dataset
 
 

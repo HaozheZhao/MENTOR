@@ -1410,6 +1410,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         batch_size = input_ids.shape[0]
+
         if not self.config.use_vision_tower or pixel_values is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)    
             if attention_mask is None:
@@ -1453,7 +1454,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
                 return_dict=return_dict,
             )
             query_output = query_outputs[0][:, : query_tokens.size(1), :]
-
+# 
         # step 3: use the language model, conditioned on the query outputs and the prompt
             language_model_inputs = self.language_projection(query_output)
 

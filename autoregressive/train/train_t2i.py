@@ -838,7 +838,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-compile", action='store_true')
     parser.add_argument("--results-dir", type=str, default="results")
     parser.add_argument("--dataset", type=str, default='ti2i')
-    parser.add_argument("--image-size", type=int, choices=[256, 384, 512], default=384)
+    parser.add_argument("--image-size", type=int, choices=[256, 384, 512], default=512)
     parser.add_argument("--downsample-size", type=int, choices=[8, 16], default=16)
     parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=3)
