@@ -14,21 +14,27 @@ from sympy import N
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from transformers import AutoTokenizer,CLIPImageProcessor
 from utils.drop_path import DropPath
 from .blip2 import Blip2ForConditionalGeneration,Blip2Config,Blip2Processor
 from .instructblip import InstructBlipForConditionalGeneration, InstructBlipConfig, InstructBlipProcessor
+from .llavat5 import LlavaT5ForConditionalGeneration,LlavaT5Config, LlavaT5Processor
 
 MULTIMODAL_ENCODER={
     "blip": Blip2ForConditionalGeneration,
-    "instructblip":InstructBlipForConditionalGeneration
+    "instructblip":InstructBlipForConditionalGeneration,
+    "llava": LlavaT5ForConditionalGeneration
 }
 MULTIMODAL_PORCESSOR={
     "blip": Blip2Processor,
-    "instructblip":InstructBlipProcessor
+    "instructblip":InstructBlipProcessor,
+    "llava": LlavaT5Processor
+
 }
 MULTIMODAL_CONFIG={
     "blip": Blip2Config,
-    "instructblip":InstructBlipConfig
+    "instructblip":InstructBlipConfig,
+    "llava": LlavaT5Config
 }
 def find_multiple(n: int, k: int):
     if n % k == 0:
@@ -74,6 +80,7 @@ class ModelArgs:
     max_seq_length: int = 120
     multimodal_encoder: str = "blip"
     
+    mm_vision_tower: str = "openai/clip-vit-base-patch14"
         
 
 #################################################################################
@@ -233,7 +240,8 @@ class Attention(nn.Module):
     def forward(
         self, x: torch.Tensor, freqs_cis: torch.Tensor = None, 
         input_pos: Optional[torch.Tensor] = None, 
-        mask: Optional[torch.Tensor] = None
+        mask: Optional[torch.Tensor] = None,
+        cls_token_num = 120
     ):
         bsz, seqlen, _ = x.shape
         kv_size = self.n_kv_head * self.head_dim
@@ -242,9 +250,8 @@ class Attention(nn.Module):
         xq = xq.view(bsz, seqlen, self.n_head, self.head_dim)
         xk = xk.view(bsz, seqlen, self.n_kv_head, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_kv_head, self.head_dim)
-        
-        xq = apply_rotary_emb(xq, freqs_cis)
-        xk = apply_rotary_emb(xk, freqs_cis)
+        xq = apply_rotary_emb(xq, freqs_cis, cls_token_num=cls_token_num)
+        xk = apply_rotary_emb(xk, freqs_cis, cls_token_num=cls_token_num)
 
         xq, xk, xv = map(lambda x: x.transpose(1, 2), (xq, xk, xv))
 
@@ -277,8 +284,8 @@ class TransformerBlock(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
     def forward(
-        self, x: torch.Tensor, freqs_cis: torch.Tensor, start_pos: int, mask: Optional[torch.Tensor] = None):
-        h = x + self.drop_path(self.attention(self.attention_norm(x), freqs_cis, start_pos, mask))
+        self, x: torch.Tensor, freqs_cis: torch.Tensor, start_pos: int, mask: Optional[torch.Tensor] = None, cls_token_num = 120):
+        h = x + self.drop_path(self.attention(self.attention_norm(x), freqs_cis, start_pos, mask, cls_token_num=cls_token_num))
         out = h + self.drop_path(self.feed_forward(self.ffn_norm(h)))
         return out
 
@@ -338,12 +345,19 @@ def get_text_encoder(args):
         image_place_holder = args.image_place_holder 
     print(f"image_place_holder: {image_place_holder}")
     processor_path =  args.processor_path if args.processor_path is not None else args.model_name_or_path
-    processor = MULTIMODAL_PORCESSOR[args.multimodal_encoder].from_pretrained(
-            processor_path
-    )
+    if "llava" in args.multimodal_encoder:
+        image_processor = CLIPImageProcessor.from_pretrained(args.mm_vision_tower)
+        tokenizer = AutoTokenizer.from_pretrained(processor_path)
+        processor = MULTIMODAL_PORCESSOR[args.multimodal_encoder](image_processor,tokenizer)
+    else:
+        processor = MULTIMODAL_PORCESSOR[args.multimodal_encoder].from_pretrained(
+                processor_path
+        )
     origin_token_length = len(processor.tokenizer)
     sp_token_set = [image_place_holder]
     processor.tokenizer.add_special_tokens({'additional_special_tokens':sp_token_set})
+    image_place_holder_id = processor.tokenizer.convert_tokens_to_ids(image_place_holder)
+    model.set_sp_token(image_place_holder_id)
     expended_token_length = len(processor.tokenizer)
     print('tokenizer length after expend', expended_token_length)
     # sp = [image_place_holder]
@@ -366,14 +380,14 @@ class Transformer(nn.Module):
         if self.model_type == 'c2i':
             self.cls_embedding = LabelEmbedder(config.num_classes, config.dim, config.class_dropout_prob)
         elif self.model_type == 't2i':
-            self.cls_embedding = CaptionEmbedder(config.caption_dim, config.dim, config.class_dropout_prob)
+            self.cls_embedding = CaptionEmbedder(config.caption_dim, config.dim, config.class_dropout_prob, token_num = config.cls_token_num)
         else:
             raise Exception("please check model type")
         if self.config.use_vision_tower:
             self.text_encoder_config , self.multimodal_encoder,self.multimodal_processor = get_text_encoder(config)
             latent_size = config.latent_size 
             self.code_len = latent_size ** 2
-            self.t5_feature_max_len = 120
+            self.t5_feature_max_len = self.cls_token_num
             self.t5_feature_dim = 2048
             self.mask_max_seq_length = self.t5_feature_max_len + self.code_len
 
@@ -508,11 +522,18 @@ class Transformer(nn.Module):
         
         if self.training:
             freqs_cis = self.freqs_cis[:token_embeddings.shape[1]]
+            rope_exclude_token_num = self.cls_token_num
+
         else:
             freqs_cis = self.freqs_cis[input_pos]
+            if cond_idx is not None and idx is None: # prefilling
+                rope_exclude_token_num = self.cls_token_num 
+            else:
+                rope_exclude_token_num = 0
+
         # transformer blocks
         for layer in self.layers:
-            h = layer(h, freqs_cis, input_pos, mask)
+            h = layer(h, freqs_cis, input_pos, mask, cls_token_num = rope_exclude_token_num )
         
         # output layers
         h = self.norm(h)
@@ -565,10 +586,17 @@ def precompute_freqs_cis_2d(grid_size: int, n_elem: int, base: int = 10000, cls_
     cache_grid = torch.stack([torch.cos(freqs_grid), torch.sin(freqs_grid)], dim=-1) # (grid_size, grid_size, head_dim // 2, 2)
     cache = cache_grid.flatten(0, 1)
     cond_cache = torch.cat([torch.zeros(cls_token_num, n_elem // 2, 2), cache]) # (cls_token_num+grid_size**2, head_dim // 2, 2)
+
+    cls_freqs_cis = torch.stack([
+        torch.ones(cls_token_num, n_elem // 2, device=freqs.device),
+        torch.zeros(cls_token_num, n_elem // 2, device=freqs.device)
+    ], dim=-1)  # (cls_token_num, n_elem // 2, 2)
+    cond_cache = torch.cat([cls_freqs_cis, cache], dim=0) # (cls_token_num+grid_size**2, head_dim //
+    
     return cond_cache 
 
 
-def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor):
+def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor, cls_token_num=120):
     # x: (bs, seq_len, n_head, head_dim)
     # freqs_cis (seq_len, head_dim // 2, 2)
     xshaped = x.float().reshape(*x.shape[:-1], -1, 2) # (bs, seq_len, n_head, head_dim//2, 2)
@@ -578,6 +606,37 @@ def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor):
             xshaped[..., 1] * freqs_cis[..., 0] + xshaped[..., 0] * freqs_cis[..., 1],
     ], dim=-1)
     x_out2 = x_out2.flatten(3)
+    return x_out2.type_as(x)
+
+
+def correct_apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor, cls_token_num=120):
+    # x: (bs, seq_len, n_head, head_dim)
+    # freqs_cis: (seq_len, head_dim // 2, 2)
+    
+    # Reshape x to split last dimension into (head_dim//2, 2)
+    xshaped = x.float().reshape(*x.shape[:-1], -1, 2)  # (bs, seq_len, n_head, head_dim//2, 2)
+    
+    # Split x into cls tokens and image tokens
+    xshaped_cls, xshaped_img = xshaped.split([cls_token_num, xshaped.size(1) - cls_token_num], dim=1)
+
+    # Correctly split freqs_cis along seq_len dimension (dim=0)
+    freqs_cis_cls, freqs_cis_img = freqs_cis.split([cls_token_num, freqs_cis.size(0) - cls_token_num], dim=0)
+    
+    # Reshape freqs_cis_img to match xshaped_img
+    freqs_cis_img = freqs_cis_img.view(1, xshaped_img.size(1), 1, xshaped_img.size(3), 2)  # (1, seq_len-cls_token_num, 1, head_dim//2, 2)
+    
+    # Apply rotary embedding only on non-cls tokens
+    x_out2_img = torch.stack([
+        xshaped_img[..., 0] * freqs_cis_img[..., 0] - xshaped_img[..., 1] * freqs_cis_img[..., 1],
+        xshaped_img[..., 1] * freqs_cis_img[..., 0] + xshaped_img[..., 0] * freqs_cis_img[..., 1],
+    ], dim=-1)
+
+    # Concatenate cls tokens and processed image tokens
+    x_out2 = torch.cat([xshaped_cls, x_out2_img], dim=1)
+
+    # Flatten back the last two dimensions
+    x_out2 = x_out2.flatten(3)
+    
     return x_out2.type_as(x)
 
 

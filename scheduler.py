@@ -26,6 +26,7 @@ class AnnealingLR(_LRScheduler):
         self.end_iter = num_iters
         self.decay_style = decay_style.lower() if isinstance(decay_style, str) else None
         self.decay_ratio = 1 / decay_ratio
+        print("AnnealingLR ++++++++++++++++++++",self.end_iter, self.restart_iter)
         self.step(self.num_iters)
         if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
             print(f'learning rate decaying style {self.decay_style}, ratio {self.decay_ratio}')

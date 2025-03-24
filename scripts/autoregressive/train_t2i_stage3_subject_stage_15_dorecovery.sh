@@ -1,6 +1,6 @@
 #!/bin/bash  
 set -x
-export PYTHONPATH="/nobackup/zefan/projects/VLGen/LlamaGen":$PYTHONPATH
+export PYTHONPATH="~/MLLMG":$PYTHONPATH
 
 # export NCCL_DEBUG=INFO
 # export NCCL_P2P_DISABLE=0
@@ -9,13 +9,13 @@ export PYTHONPATH="/nobackup/zefan/projects/VLGen/LlamaGen":$PYTHONPATH
 
 experiment_name="llamagen_t2i_stage3_subject_instructblip"
 # model_name_or_path="/nobackup/zefan/projects/VLGen/model/blip2-flan-t5-xl"
-model_name_or_path="/nobackup/zefan/projects/VLGen/model/instructblip-flan-t5-xl"
+model_name_or_path="/tmp/haozhezhao/model/instructblip-flan-t5-xl"
 
 data_path="/nobackup/zefan/projects/VLGen/LlamaGen/training_set.jsonl"
 val_data_path="/nobackup/zefan/projects/VLGen/LlamaGen/validation_set.jsonl"
-load_from_checkpoint="/nobackup/zefan/projects/VLGen/model/llamagen/t2i_XL_stage2_512.pt"
-subject_embedding="/nobackup/zefan/projects/VLGen/model/subject_embedding.bin"
-subject_embedding="/nobackup/zefan/projects/VLGen/model/subject_embedding_instructblip.pth"
+load_from_checkpoint="/tmp/haozhezhao/model/llamagen_t2i/t2i_XL_stage2_512.pt"
+subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
+subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding_instructblip.pth"
 
 lr=1e-4
 num_workers=32
@@ -48,12 +48,12 @@ torchrun \
 --nproc_per_node=$nproc_per_node \
 --node_rank=$node_rank \
 autoregressive/train/train_t2i.py \
---vq-ckpt /nobackup/zefan/projects/VLGen/model/llamagen/vq_ds16_t2i.pt \
+--vq-ckpt /tmp/haozhezhao/model/llamagen_t2i/vq_ds16_t2i.pt \
 --data-path ${data_path} \
 --dataset ti2i \
 --image-size 512 \
 --results-dir ${experiment_name} \
---cloud-save-path /nobackup/zefan/projects/VLGen/LlamaGen \
+--cloud-save-path ~/MLLMG/checkpoint \
 --lr ${lr} \
 --val_data_path ${val_data_path} \
 --use_vision_tower \
@@ -74,7 +74,7 @@ autoregressive/train/train_t2i.py \
 --ckpt-every ${ckpt_every} \
 --epochs 2 \
 --subject_driven \
---reference_data_path /nobackup/zefan/projects/VLGen/LlamaGen/reference.jsonl \
+--reference_data_path /tmp/haozhezhao/MLLMG/reference.jsonl \
 --multimodal_encoder ${multimodal_encoder} \
 --do_recovery \
 # --load_subject_embedding ${subject_embedding} \

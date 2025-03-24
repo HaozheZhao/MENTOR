@@ -1276,7 +1276,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             self.qformer = Blip2QFormerModel(config.qformer_config)
 
             self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        
+            self.sp_token = 32001
         # if  config.use_encoder_only_language_model:
         language_model = T5EncoderModel(config = config.text_config)
         # else:
@@ -1290,7 +1290,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         # self.processor = Blip2Processor.from_pretrained(self.config._name_or_path)
         # Initialize weights and apply final processing
         self.post_init()
-
+    def set_sp_token(self, sp_token):
+        self.sp_token = sp_token
     def get_input_embeddings(self) -> nn.Module:
         return self.language_model.get_input_embeddings()
     
@@ -1309,7 +1310,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         return_dict: Optional[bool] = None,
         img_mask: Optional[torch.Tensor] = None,
         set_min_padding_size: bool = True,
-        sp_token: Optional[int] = 32100, # for flan-t5; opt ? 32001
+        # sp_token: Optional[int] = 32100, # for flan-t5; opt ? 32001
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -1382,45 +1383,69 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             if attention_mask is None:
                 attention_mask = torch.ones_like(input_ids)
             attention_mask = attention_mask.to(inputs_embeds.device)
+            vision_outputs = None
+            query_outputs = None
 
         else:
             if img_mask is None:
                 img_mask = torch.ones(pixel_values.shape[:2])
             img_count = img_mask.sum(1)
-            pixel_values = pixel_values[img_mask.bool()]
-            vision_outputs = self.vision_model(
-                pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            image_embeds = vision_outputs[0]
-            # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
-            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
-            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_outputs = self.qformer(
-                    text_input_ids=text_input_ids, 
-                    text_attention_mask=text_attention_mask,
-                    query_embeds=query_tokens,
-                    encoder_hidden_states=image_embeds,
-                    encoder_attention_mask=image_attention_mask,
+            pixel_values_selected = pixel_values[img_mask.bool()]
+
+            # pixel_values is empty
+            if pixel_values_selected.numel() == 0:
+                inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+                if attention_mask is None:
+                    attention_mask = torch.ones_like(input_ids)
+                attention_mask = attention_mask.to(inputs_embeds.device)
+                vision_outputs = None
+                query_outputs = None
+
+            else:
+                pixel_values = pixel_values_selected
+                text_input_ids = text_input_ids[img_mask.bool()]
+                if text_attention_mask is not None:
+                    text_attention_mask = text_attention_mask[img_mask.bool()]
+
+                vision_outputs = self.vision_model(
+                    pixel_values=pixel_values,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
                 )
-            query_output = query_outputs[0][:, : query_tokens.size(1), :]
-            # step 3: use the language model, conditioned on the query outputs and the prompt
-           
-
-            language_model_inputs = self.language_projection(query_output)
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-                attention_mask = attention_mask.to(language_model_inputs.device)
-
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            image_embeds_index = torch.where(input_ids == sp_token)
-            inputs_embeds[image_embeds_index] = language_model_inputs.reshape(-1,language_model_inputs.shape[-1])
+                image_embeds = vision_outputs[0]
+                # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
+                image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+                query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+                query_outputs = self.qformer(
+                        text_input_ids=text_input_ids, 
+                        text_attention_mask=text_attention_mask,
+                        query_embeds=query_tokens,
+                        encoder_hidden_states=image_embeds,
+                        encoder_attention_mask=image_attention_mask,
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                        return_dict=return_dict,
+                    )
+                query_output = query_outputs[0][:, : query_tokens.size(1), :]
+                # step 3: use the language model, conditioned on the query outputs and the prompt
             
+
+                language_model_inputs = self.language_projection(query_output)
+                if attention_mask is None:
+                    attention_mask = torch.ones_like(input_ids)
+                    attention_mask = attention_mask.to(language_model_inputs.device)
+
+                inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+                image_embeds_index = torch.where(input_ids == self.sp_token)
+                if inputs_embeds[image_embeds_index].shape[0] != language_model_inputs.reshape(-1,language_model_inputs.shape[-1]).shape[0]:
+                    language_model_inputs = language_model_inputs.reshape(-1,language_model_inputs.shape[-1])
+                    language_model_inputs = language_model_inputs[:inputs_embeds[image_embeds_index].shape[0]]
+                    inputs_embeds[image_embeds_index] = language_model_inputs
+
+                else:
+                    inputs_embeds[image_embeds_index] = language_model_inputs.reshape(-1,language_model_inputs.shape[-1])
+                
         min_padding_size = min(input_ids.shape[-1],self.max_sequence_length)
         # min_padding_size = self.max_sequence_length
         if not set_min_padding_size:

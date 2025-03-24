@@ -167,6 +167,10 @@ llamagen_t2i_stage3_subject/
 wandb/
 *.pth
 *.bin
+!llava-v1.5-flant5_fixed-pretrain/
+!llava-v1.5-flant5_fixed-pretrain/**
+!subject_embedding_instructblip.pth
+!subject_embedding.pth
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

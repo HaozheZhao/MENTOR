@@ -31,12 +31,15 @@ import time
 import argparse
 import os
 from torch.nn.utils.rnn import pad_sequence  
+import torch.nn.functional as F
 from utils.distributed import init_distributed_mode
 from utils.logger import create_logger
 from dataset.build import build_dataset
 from dataset.augmentation import center_crop_arr
 from autoregressive.train.train_c2i import creat_optimizer
 from autoregressive.models.gpt import GPT_models
+from autoregressive.models.ori_gpt import GPT_models as GPT_models_ori
+from autoregressive.models.empty_fix_gpt import GPT_models as GPT_models_empty
 from tokenizer.tokenizer_image.vq_model import VQ_models
 from autoregressive.models.generate import generate
 from torchvision.utils import save_image
@@ -45,6 +48,12 @@ from scheduler import AnnealingLR
 import random
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+GPT_MODEL = {
+    'gpt': GPT_models_ori,
+    'gpt-empty-fix': GPT_models_empty,
+    'gpt-zero-fix' : GPT_models
+}
 def text_to_image(text, width, height, font_size=30, padding=10):
     """Converts a single text string to an image with automatic line wrapping based on width."""
     img = Image.new('RGB', (width, height), color=(255, 255, 255))
@@ -95,6 +104,19 @@ def main(args):
     print(f"Using visual encoder type: {args.multimodal_encoder}")
     # Setup DDP:
     init_distributed_mode(args)
+    # import debugpy
+    # # 根据分布式进程的 rank 动态分配调试端口
+    # if "RANK" in os.environ:
+    #     rank = int(os.environ["RANK"])
+    #     debug_port = 12345 # 每个进程分配不同的端口
+    #     debugpy.listen(("0.0.0.0", debug_port))
+    #     print(f"Rank {rank} is waiting for debugger to attach at port {debug_port}...")
+    #     debugpy.wait_for_client()
+
+    # # 确保在调试器附加后继续执行
+    # if "RANK" not in os.environ or dist.get_rank() == 0:
+    #     print("Debugpy initialized, continuing execution...")
+
     assert args.global_batch_size % dist.get_world_size() == 0, f"Batch size must be divisible by world size."
     rank = dist.get_rank()
     device = rank % torch.cuda.device_count()
@@ -134,7 +156,7 @@ def main(args):
 
     # Setup model
     latent_size = args.image_size // args.downsample_size
-    model = GPT_models[args.gpt_model](
+    model = GPT_MODEL[args.fix][args.gpt_model](
         vocab_size=args.vocab_size,
         block_size=latent_size ** 2,
         num_classes=args.num_classes,
@@ -151,7 +173,8 @@ def main(args):
         image_place_holder = args.image_place_holder,
         processor_path = args.processor_path,
         max_seq_length = args.cls_token_num,
-        multimodal_encoder = args.multimodal_encoder
+        multimodal_encoder = args.multimodal_encoder,
+        mm_vision_tower = args.mm_vision_tower,
         
     ).to(device)
     logger.info(f"GPT Parameters: {sum(p.numel() for p in model.parameters()):,}")
@@ -178,6 +201,24 @@ def main(args):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
+    def pad_input_ids(text_input_ids, padding_value=0):
+        # 找到所有 tensor 的最大行数和最大列数
+        max_n = max(t.shape[0] for t in text_input_ids)
+        max_m = max(t.shape[1] for t in text_input_ids)
+        
+        padded_list = []
+        for t in text_input_ids:
+            n, m = t.shape
+            pad_n = max_n - n   # 行方向需要补的数量
+            pad_m = max_m - m   # 列方向需要补的数量
+            
+            # 对于二维 tensor，F.pad 的 padding 参数格式为：(左边, 右边, 上面, 下面)
+            padded_t = F.pad(t, (0, pad_m, 0, pad_n), "constant", padding_value)
+            padded_list.append(padded_t)
+        
+        # Stack 成一个 shape 为 (batch, max_n, max_m) 的 tensor
+        return torch.stack(padded_list)
+
     def custom_collate_fn(batch):  
         # Extract individual fields from batch data:
         expected_length = len(batch[0])
@@ -224,8 +265,7 @@ def main(args):
                 # Pad the tensor to the desired size  
                 # Padding size format: (lastdim_pad_before, lastdim_pad_after, ..., firstdim_pad_before, firstdim_pad_after)  
                 # padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0, 0, padding_needed), "constant", 0)
-                padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0,padding_needed, 0),
-                                                    "constant", 0)
+                padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0, 0, padding_needed), "constant", 0)
                 padded_pixel_values.append(padded_pv)  
             
             # Stack all padded pixel_values into a single tensor
@@ -252,8 +292,8 @@ def main(args):
             if len(text_input_ids) == 0:
                 text_input_ids_padded, text_attention_mask_padded = None, None
             else:
-                text_input_ids_padded = pad_sequence(text_input_ids, batch_first=True, padding_value=0)
-                text_attention_mask_padded = pad_sequence(text_attention_mask, batch_first=True, padding_value=0)
+                text_input_ids_padded = pad_input_ids(text_input_ids, padding_value=0)
+                text_attention_mask_padded = pad_input_ids(text_attention_mask, padding_value=0)
             
         # print(f"images shape: {images.shape}")
         # print(f"pixel_values shape: {pixel_values.shape}")
@@ -280,7 +320,6 @@ def main(args):
             common_items = [images[valids_bool], valid_pixel_values , cond_idxs_padded[valids_bool], attention_masks_padded[valids_bool], valid_padded_image_masks ,img_pixel[valids_bool], valids[valids_bool]]  
 
             if expected_length == 9 or expected_length == 10:
-                
                 valid_text_input_ids_padded = text_input_ids_padded[valids_bool[is_generated] ] if text_input_ids_padded is not None else None
                 valid_text_attention_mask_padded= text_attention_mask_padded[valids_bool[is_generated] ] if text_attention_mask_padded is not None else None
 
@@ -300,7 +339,7 @@ def main(args):
             elif expected_length == 10:
                 common_items.extend([pixel_source, text_input_ids_padded, text_attention_mask_padded])
 
-        return tuple(common_items)
+        return tuple(common_items),valids_bool & is_generated
 
 
     if args.use_vision_tower:
@@ -343,6 +382,9 @@ def main(args):
     logger.info(f"Dataset contains {len(dataset):,} images")
 
     train_iters = len(loader) * args.epochs
+
+    logger.info(f"Train iters {train_iters} , warmup {args.warmup * train_iters}, len of loader {len(loader)}")
+
     # define lr_scheduler
     lr_scheduler = AnnealingLR(
         optimizer,
@@ -381,19 +423,45 @@ def main(args):
 
     if args.load_from_checkpoint is not None:
         strict = True
-        if not args.stage2:
-            result = load_sharded_checkpoint(model.multimodal_encoder,args.model_name_or_path,strict=False)
-            print(f'load multimodal_encoder from pretrained CKPT: {args.model_name_or_path}  Result: ',result)
-            if args.subject_driven:
-                if args.multimodal_encoder == 'blip':
-                    subject_embedding_ckpt = torch.load(args.load_subject_embedding, map_location="cpu")
-                    model.multimodal_encoder.qformer.embeddings.load_state_dict(subject_embedding_ckpt, strict=True) 
-                    del subject_embedding_ckpt
+        if args.continue_stage1:
             strict = False
-        checkpoint = torch.load(args.load_from_checkpoint, map_location="cpu")
-        result_llama = model.load_state_dict(checkpoint["model"], strict=strict)
-        print(f'load generator from pretrained CKPT: {args.load_from_checkpoint} Result: ', result_llama)
-        del checkpoint
+            checkpoint = torch.load(args.load_from_checkpoint, map_location="cpu")["model"]
+            uncond_embedding_weight = checkpoint.pop('cls_embedding.uncond_embedding')
+
+            # Load other model parameters
+            result_llama = model.load_state_dict(checkpoint, strict=strict)
+            model.cls_embedding.uncond_embedding.data[:120] = uncond_embedding_weight
+        else:
+            if not args.stage2:
+                result = load_sharded_checkpoint(model.multimodal_encoder,args.model_name_or_path,strict=False)
+                print(f'load multimodal_encoder from pretrained CKPT: {args.model_name_or_path}  Result: ',result)
+                if args.subject_driven:
+                    if args.multimodal_encoder == 'blip':
+                        subject_embedding_ckpt = torch.load(args.load_subject_embedding, map_location="cpu")
+                        model.multimodal_encoder.qformer.embeddings.load_state_dict(subject_embedding_ckpt, strict=True) 
+                        del subject_embedding_ckpt
+
+                if args.multimodal_encoder == 'llava':
+                    model.multimodal_encoder.vision_model.load_model()
+                    temp_ckpt = torch.load(args.load_language_projection, map_location="cpu")
+                    language_projection_ckpt = {
+                      k[len("model.mm_projector."):]: v  for k,v in temp_ckpt.items()
+                    }
+                    model.multimodal_encoder.language_projection.load_state_dict(language_projection_ckpt, strict=True) 
+                    del language_projection_ckpt, temp_ckpt
+                strict = False
+            checkpoint = torch.load(args.load_from_checkpoint, map_location="cpu")
+            if args.cls_token_num != 120 and not args.load_fixed_llamagen:
+                strict = False
+                uncond_embedding_ckpt = checkpoint["model"].pop('cls_embedding.uncond_embedding')
+                random_init_uncond_embedding = model.cls_embedding.uncond_embedding.data
+                random_init_uncond_embedding[:120] = uncond_embedding_ckpt
+                checkpoint["model"]["cls_embedding.uncond_embedding"] = random_init_uncond_embedding
+
+                
+            result_llama = model.load_state_dict(checkpoint["model"], strict=strict)
+            print(f'load generator from pretrained CKPT: {args.load_from_checkpoint} Result: ', result_llama)
+            del checkpoint
         
     if args.gpt_ckpt:
         checkpoint = torch.load(args.gpt_ckpt, map_location="cpu")
@@ -405,8 +473,18 @@ def main(args):
 
             reuslt = model.load_state_dict(state_dict, strict=False)
             print(f"loading visual encoder from CKPT {args.gpt_ckpt}, loading result is : {result}")
+        
+        elif args.multimodal_encoder == 'llava':
+            result = model.load_state_dict(checkpoint["model"], strict=False)
+            print(f"loading pretrained generator from CKPT {args.gpt_ckpt}, loading result is : {result}")
+
+            
         else:
-            model.load_state_dict(checkpoint["model"], strict=True)
+            if "model" in checkpoint:
+                state_dict = checkpoint["model"]
+            else:
+                state_dict = checkpoint
+            model.load_state_dict(state_dict, strict=True)
         if args.resume:
             optimizer.load_state_dict(checkpoint["optimizer"])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -440,27 +518,48 @@ def main(args):
         for para in model.multimodal_encoder.vision_model.parameters():
             para.requires_grad = False
 
-        if args.train_text_encoder:
-            logger.info(f"set text encoder as trainable")
-
-            for para in model.multimodal_encoder.language_projection.parameters():
+        if args.train_all:
+            for para in model.parameters():
                 para.requires_grad = True
-            if args.subject_driven and not args.stage2 and not args.do_recovery: # freeze t5, train the rest
-                for para in model.multimodal_encoder.language_model.parameters():
+            for para in model.multimodal_encoder.vision_model.parameters():
+                para.requires_grad = False
+        else:
+            if args.train_text_encoder:
+                logger.info(f"set text encoder as trainable")
+
+                for para in model.multimodal_encoder.parameters():
+                    para.requires_grad = True
+                for para in model.multimodal_encoder.vision_model.parameters():
                     para.requires_grad = False
-                for para in model.multimodal_encoder.language_projection.parameters():
-                    para.requires_grad = False
-                for para in model.layers.parameters():
-                    para.requires_grad = False
-                for para in model.cls_embedding.parameters():
-                    para.requires_grad = False
-                # for para in model.norm.parameters():
-                #     para.requires_grad = False
-                # for para in model.output.parameters():
-                #     para.requires_grad = False
+                if args.subject_driven and not args.stage2 and not args.do_recovery: # freeze rest
+
+                    if "llava" not in args.multimodal_encoder:
+                        for para in model.multimodal_encoder.qformer.parameters():
+                            para.requires_grad = False
+                        for para in model.multimodal_encoder.language_projection.parameters():
+                            para.requires_grad = True
+                    else:
+                        logger.info(f"set vision model freeze")
+                        for para in model.multimodal_encoder.vision_model.parameters():
+                            para.requires_grad =False
+                        for para in model.multimodal_encoder.language_projection.parameters():
+                            para.requires_grad = True
+                    for para in model.layers.parameters():
+                        para.requires_grad = False
+                    for para in model.cls_embedding.parameters():
+                        para.requires_grad = False
+                    if args.unfreeze_output:
+                        for para in model.norm.parameters():
+                            para.requires_grad = True
+                        for para in model.output.parameters():
+                            para.requires_grad = True
+                    else:
+                        for para in model.norm.parameters():
+                            para.requires_grad = False
+                        for para in model.output.parameters():
+                            para.requires_grad = False
             # if args.do_recovery:
-            #     for para in model.multimodal_encoder.qformer.parameters():
-            #         para.requires_grad = False
+
             # elif args.subject_driven and args.do_recovery: 
             #     for para in model.multimodal_encoder.language_model.parameters():
             #         para.requires_grad = True
@@ -470,7 +569,12 @@ def main(args):
             # else:
             #     for para in model.multimodal_encoder.language_model.parameters():
             #         para.requires_grad = True
-
+    if args.continue_stage1 and args.use_vision_tower:
+        logger.info(f"Continue Stage1, only generator is trainable")
+        for para in model.parameters():
+            para.requires_grad = True
+        for para in model.multimodal_encoder.parameters():
+            para.requires_grad = False
     all_param = 0
     trained_param=0
     for _, param in model.named_parameters():
@@ -522,9 +626,9 @@ def main(args):
             # logger.info(f"Training {train_steps} steps...")
             if args.use_vision_tower:
                 if args.subject_driven:
-                    x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid, text_input_ids, text_attention_mask = sample
+                    (x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid, text_input_ids, text_attention_mask),is_generated = sample
                 else:
-                    x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid = sample
+                    (x, pixel_values, c_indices, cond_attn_mask, image_masks,gt_img, valid),is_generated = sample
                 
                 x = x.to(device, non_blocking=True)
                 if pixel_values is not None:
@@ -625,7 +729,7 @@ def main(args):
                 if torch.distributed.get_rank() == 0:
                     with torch.no_grad():
                         torch.cuda.synchronize()
-                        eval_model = GPT_models[args.gpt_model](
+                        eval_model = GPT_MODEL[args.fix][args.gpt_model](
                             vocab_size=args.vocab_size,
                             block_size=latent_size ** 2,
                             num_classes=args.num_classes,
@@ -643,7 +747,8 @@ def main(args):
                             image_place_holder=args.image_place_holder,
                             processor_path=args.processor_path,
                             max_seq_length=args.cls_token_num,
-                            multimodal_encoder=args.multimodal_encoder
+                            multimodal_encoder=args.multimodal_encoder,
+                            mm_vision_tower=args.mm_vision_tower,
 
                         )
 
@@ -657,7 +762,7 @@ def main(args):
                         eval_model.eval()
                         for eval_idx, patch in enumerate(tqdm(val_loader)):  
                             if args.subject_driven:
-                                eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks,eval_gt_img, eval_valid, pixual_value_source, text_input_ids, text_attention_mask = patch
+                                (eval_x, eval_pixel_values, eval_c_indices, eval_cond_attn_mask, eval_image_masks,eval_gt_img, eval_valid, pixual_value_source, text_input_ids, text_attention_mask),is_generated = patch
                                 if text_input_ids is None:
                                     text_input_ids = None
                                     text_attention_mask = None
@@ -669,8 +774,8 @@ def main(args):
                                 text_input_ids = None
                                 text_attention_mask = None
                             if eval_pixel_values is not None:
-                                eval_pixel_values = eval_pixel_values.to(device, non_blocking=True)
-                                eval_image_masks = eval_image_masks.to(device, non_blocking=True)
+                                eval_pixel_values = eval_pixel_values.to(device,ptdtype, non_blocking=True)
+                                eval_image_masks = eval_image_masks.to(device, ptdtype, non_blocking=True)
                             eval_x = eval_x.to(device,ptdtype, non_blocking=True)
                             eval_c_indices = eval_c_indices.to(device, non_blocking=True)
                             eval_cond_attn_mask = eval_cond_attn_mask.to(device, non_blocking=True)
@@ -709,7 +814,7 @@ def main(args):
                                 temperature=args.temperature, top_k=args.top_k,
                                 top_p=args.top_p, sample_logits=True,
                                 )
-                            samples = vq_model.decode_code(index_sample, qzshape)
+                            img_samples = vq_model.decode_code(index_sample, qzshape)
                             eval_dir = f"{checkpoint_dir}/eval_step_{train_steps}"
                             os.makedirs(eval_dir, exist_ok=True)
                             sample_save_path = f"{eval_dir}/batch_{eval_idx}_cfg_{args.cfg_scale}_topk_{args.top_k}.jpg"
@@ -717,30 +822,38 @@ def main(args):
                             ori_save_path = f"{eval_dir}/ori.jpg"
                             sample_text = eval_model.multimodal_processor.tokenizer.batch_decode(eval_c_indices, skip_special_tokens=True)
 
-
-                            if text_input_ids is not None and args.subject_driven:
-                                subject_text = qformer_tokenizer.batch_decode(text_input_ids, skip_special_tokens=True)
+                            if args.subject_driven:
+                                if text_input_ids is not None:
+                                    subject_text = qformer_tokenizer.batch_decode(text_input_ids[eval_image_masks.bool()], skip_special_tokens=True)
+                                else:
+                                    subject_text = "None"
 
                             try:
-                                if not args.stage2:
-                                    p_values = eval_pixel_values[:,0] if len(eval_pixel_values.shape) == 5  else eval_pixel_values
-                                else:
-                                    p_values = pixual_value_source[:,0] if len(pixual_value_source.shape) == 5  else pixual_value_source
+                                
+                                if eval_pixel_values is not None:
+                                    if not args.stage2:
+                                        p_values = eval_pixel_values[:,0] if len(eval_pixel_values.shape) == 5  else eval_pixel_values
+                                    else:
+                                        p_values = pixual_value_source[:,0] if len(pixual_value_source.shape) == 5  else pixual_value_source
+                                    pixel_values_img_list = postprocess(p_values, mean=eval_model.multimodal_processor.image_processor.image_mean,
+                                                                std=eval_model.multimodal_processor.image_processor.image_std)
+                                    transformed_images = [transform(img.resize(
+                                        (args.image_size, args.image_size), Image.LANCZOS)) for img in pixel_values_img_list] # input images
+                                    transformed_images = torch.stack(transformed_images)
+
+                                    if transformed_images.shape[0] != eval_x.size(0):
+                                        tmp_transformed_images = torch.zeros(eval_x.size(0), transformed_images.shape[1], transformed_images.shape[2], transformed_images.shape[3])
+                                        tmp_transformed_images[is_generated] = transformed_images
+                                        transformed_images = tmp_transformed_images
+
+
                                 gt_values = eval_gt_img[:,0] if len(eval_gt_img.shape) == 5  else eval_gt_img
-
-
-
-                                pixel_values_img_list = postprocess(p_values, mean=eval_model.multimodal_processor.image_processor.image_mean,
-                                                               std=eval_model.multimodal_processor.image_processor.image_std)
                                 eval_gt_img_list = postprocess(gt_values, mean=eval_model.multimodal_processor.image_processor.image_mean,
                                                                 std=eval_model.multimodal_processor.image_processor.image_std)
-                                transformed_images = [transform(img.resize(
-                                    (args.image_size, args.image_size), Image.LANCZOS)) for img in pixel_values_img_list] # input images
-                                transformed_images = torch.stack(transformed_images)
                                 transformed_gt_imgs = [transform(img.resize(
                                     (args.image_size, args.image_size), Image.LANCZOS)) for img in eval_gt_img_list] # input images
                                 transformed_gt_imgs = torch.stack(transformed_gt_imgs)
-                                samples = samples.to(transformed_images.device)
+                                img_samples = img_samples.to(transformed_gt_imgs.device)
 
                                 if text_input_ids is not None and args.subject_driven:
                                     text_images_tensors = [
@@ -756,8 +869,21 @@ def main(args):
 
                                 text_images_tensors = torch.stack(text_images_tensors)
 
+                                if transformed_gt_imgs.shape[0] != eval_x.size(0):
+                                    tmp_transformed_gt_imgs = torch.zeros(eval_x.size(0), transformed_gt_imgs.shape[1], transformed_gt_imgs.shape[2], transformed_gt_imgs.shape[3])
+                                    tmp_transformed_gt_imgs[is_generated] = transformed_gt_imgs
+                                    transformed_gt_imgs = tmp_transformed_gt_imgs
 
-                                images_to_save = torch.cat((text_images_tensors,transformed_images, samples, transformed_gt_imgs), dim=0) # input text, input images, generated images, ground truth images
+                                if text_images_tensors.shape[0] != eval_x.size(0):
+                                    tmp_text_images_tensors = torch.zeros(eval_x.size(0), text_images_tensors.shape[1], text_images_tensors.shape[2], text_images_tensors.shape[3])
+                                    tmp_text_images_tensors[is_generated] = text_images_tensors
+                                    text_images_tensors = tmp_text_images_tensors
+                                
+                                if  eval_pixel_values is not None:
+                                    images_to_save = torch.cat((text_images_tensors,transformed_images, img_samples, transformed_gt_imgs), dim=0) # input text, input images, generated images, ground truth image
+                                else:
+                                    images_to_save = torch.cat((text_images_tensors, img_samples, transformed_gt_imgs), dim=0) # input text, generated images, ground truth image
+
                                 save_image(images_to_save, sample_save_path, nrow=eval_x.size(0), normalize=True,
                                            value_range=(-1, 1))
                             except Exception as e:
@@ -765,15 +891,30 @@ def main(args):
                                 print(e)
                                 import traceback
                                 traceback.print_exc()
+
+                                text_images_tensors = [
+                                        transform(text_to_image(text, args.image_size, args.image_size ))
+                                        for  text in sample_text
+                                    ]
+
+                                text_images_tensors = torch.stack(text_images_tensors)
+                                if text_images_tensors.shape[0] != eval_x.size(0):
+                                    tmp_text_images_tensors = torch.zeros(eval_x.size(0), text_images_tensors.shape[1], text_images_tensors.shape[2], text_images_tensors.shape[3])
+                                    tmp_text_images_tensors[is_generated] = text_images_tensors
+                                    text_images_tensors = tmp_text_images_tensors
+
                                 img_denormalized = eval_x * 0.5 + 0.5
                                 img_denormalized = torch.clamp(img_denormalized, 0, 1)
-                                save_image(img_denormalized, ori_save_path, nrow=img_denormalized.shape[0])
 
-                                save_image(samples, sample_save_path, nrow=samples.shape[0], normalize=True, value_range=(-1, 1))
-                        wandb.log(
-                            {"eval_samples": wandb.Image(upload_path) },
-                            step=train_steps,
-                        )
+                                images_to_save = torch.cat((text_images_tensors.to("cpu"),img_denormalized.to("cpu"), img_samples.to("cpu")), dim=0) # input text, input images, generated images, ground truth images
+
+                                # save_image(img_denormalized, ori_save_path, nrow=img_denormalized.shape[0])
+
+                                save_image(images_to_save, sample_save_path, nrow=img_samples.shape[0], normalize=True)
+                        # wandb.log(
+                        #     {"eval_samples": wandb.Image(upload_path) },
+                        #     step=train_steps,
+                        # )
 
                         # dist.barrier()
                         # model.train()
@@ -802,6 +943,18 @@ def main(args):
                         torch.save(checkpoint, checkpoint_path)
                         logger.info(f"Saved checkpoint to {checkpoint_path}")
                     
+                        # 仅当设置了保存数量限制时才进行删除操作
+                        if args.save_total_limit > 0:
+                            # 获取 checkpoint 目录下所有 .pt 文件
+                            checkpoint_files = glob(os.path.join(checkpoint_dir, "*.pt"))
+                            # 按照文件名中的数字（训练步数）排序，假设文件名格式为 "0000001.pt"
+                            checkpoint_files.sort(key=lambda x: int(os.path.basename(x).split('.')[0]))
+                            
+                            # 如果文件数超过限制，则删除最旧的文件
+                            while len(checkpoint_files) > args.save_total_limit:
+                                oldest_checkpoint = checkpoint_files.pop(0)
+                                os.remove(oldest_checkpoint)
+                                logger.info(f"Removed old checkpoint: {oldest_checkpoint}")
                     # cloud_checkpoint_path = f"{cloud_checkpoint_dir}/{train_steps:07d}.pt"
                     # torch.save(checkpoint, cloud_checkpoint_path)
                     # logger.info(f"Saved checkpoint in cloud to {cloud_checkpoint_path}")
@@ -817,6 +970,16 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # import debugpy
+
+    # # 监听指定的地址和端口（可以是本机或远程服务器）
+    # debugpy.listen(("0.0.0.0", 11223))
+
+    # print("等待调试器连接...")
+    # debugpy.wait_for_client()  # 让程序在这里暂停，直到 VS Code 连接调试
+
+    # print("调试器已连接，开始执行代码！")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, required=True)
     # parser.add_argument("--t5-feat-path", type=str, required=True)
@@ -897,7 +1060,7 @@ if __name__ == "__main__":
     # image only
     parser.add_argument("--with_image_only", action='store_true')
 
-    parser.add_argument("--image_only_rate", type=float, default=0.6, help="image_only_rate")
+    parser.add_argument("--image_only_rate", type=float, default=0.1, help="image_only_rate")
 
     parser.add_argument("--stage2", action='store_true')
 
@@ -923,6 +1086,28 @@ if __name__ == "__main__":
     parser.add_argument("--find_unused_parameters", action='store_true', default=False)
     
     parser.add_argument("--load_visual_encoder", action='store_true', default=False)
+
+    parser.add_argument("--continue_stage1", action='store_true')
+    
+    parser.add_argument("--replace_subject",  action='store_true')
+
+    parser.add_argument("--train_all",  action='store_true')
+
+    parser.add_argument("--save_total_limit",  type=int, default=2)
+
+    parser.add_argument("--load_language_projection", type=str, default=None)
+    parser.add_argument("--mm_vision_tower", type=str, default="openai/clip-vit-large-patch14")
+
+    parser.add_argument("--load_fixed_llamagen", action='store_true', default=False)
+
+    parser.add_argument("--unfreeze_output", action='store_true', default=False)
+
+    parser.add_argument("--fix", type=str, choices=["gpt","gpt-zero-fix", "gpt-empty-fix"], default="gpt")
+
+    # local_rank = int(os.environ.get("LOCAL_RANK", 0))
+
+
+
 
     args = parser.parse_args()
     main(args)
