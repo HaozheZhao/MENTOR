@@ -29,6 +29,8 @@ experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_dr
 
 experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects"
 
+experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects_no_overlap"
+
 # model_name_or_path="/nobackup/zefan/projects/VLGen/model/blip2-flan-t5-xl"
 model_name_or_path="/tmp/haozhezhao/model/instructblip-flan-t5-xl"
 
@@ -48,15 +50,17 @@ data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_300
 data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_400k_recap_t2i_400k_flux_100k_recovery_100k_grounding_server2.jsonl"
 data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_200k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
 data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_molom_imagenet_flux_sam_1_2m_trained.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_filtered_trained.jsonl"
 
-val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_molom_imagenet_flux_sam_1_2m_val.jsonl "
+val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_molom_imagenet_flux_sam_1_2m_val.jsonl"
+val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_filtered_val.jsonl"
 # val_data_path="/nobackup/zefan/projects/VLGen/LlamaGen/eval_test.jsonl"
 load_from_checkpoint="/tmp/haozhezhao/model/llamagen_t2i/t2i_XL_stage2_512.pt"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding_instructblip.pth"
 
 lr=5e-5
-num_workers=8
+num_workers=4
 
 nnodes=2
 nproc_per_node=8
@@ -91,22 +95,27 @@ autoregressive/train/train_t2i.py \
 --cfg-scale 7.5 \
 --top-k 16384 \
 --load_from_checkpoint ${load_from_checkpoint} \
---global-batch-size 80 \
+--global-batch-size 96 \
 --num-workers ${num_workers} \
 --warmup 0.05 \
 --gradient-accumulation-steps 4 \
 --train_text_encoder \
 --ckpt-every ${ckpt_every} \
---epochs 4 \
+--epochs 10 \
 --subject_driven \
 --reference_data_path /tmp/haozhezhao/MLLMG/cc12m_reference_tunnel.jsonl \
 --multimodal_encoder ${multimodal_encoder} \
 --do_recovery \
 --find_unused_parameters \
---gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects/009-GPT-XL/checkpoints/0008000.pt \
 --train_all \
---resume \
 --fix 'gpt-zero-fix' \
+--gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects_no_overlap/010-GPT-XL/checkpoints/0008000.pt \
+--resume \
+
+# --no-compile \
+
+# --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects/009-GPT-XL/checkpoints/0008000.pt \
+
 # --replace_subject \
 
 # --resume \
@@ -117,7 +126,6 @@ autoregressive/train/train_t2i.py \
 # --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/llamagen_t2i_stage3_subject_instructblip_train_only_qformer_T5_subject_t2i_ti2i/004-GPT-XL/checkpoints/0036000.pt \
 
 # --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/llamagen_t2i_stage3_subject_instructblip_train_only_qformer_T5_subject_t2i_ti2i/031-GPT-XL/checkpoints/0048000.pt \
-# --no-compile \
 
 # --gpt-ckpt /nobackup/zefan/projects/VLGen/LlamaGen/llamagen_t2i_stage3_subject_instructblip_train_except_t5_vit_llamagen_alllayers_no_norm_output/003-GPT-XL/checkpoints/0044000.pt \
 # --load_visual_encoder \
