@@ -27,6 +27,8 @@ experiment_name="checkpoint/InstructBlip_just_segment_pretrain_stage3_dreambench
 
 experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_dreambench_recap_Subject200k_filtered_t2i_flux400k_200kmid_recovery_150k_extract_150k_100_fluxseg_50samseg_trainall_1e4_no_replace"
 
+experiment_name="checkpoint/EmptyFix_InstructBlip_just_segment_pretrain_stage3_dreambench_recap_Subject400k_filtered_t2i_flux400k_200kmid_recovery_150k_extract_150k_100_fluxseg_50samseg_trainall_1e4_no_replace"
+
 # model_name_or_path="/nobackup/zefan/projects/VLGen/model/blip2-flan-t5-xl"
 model_name_or_path="/tmp/haozhezhao/model/instructblip-flan-t5-xl"
 
@@ -45,11 +47,12 @@ data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_600
 data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_300k_flux_100k_recovery_100k_grounding.jsonl"
 data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_400k_recap_t2i_400k_flux_100k_recovery_100k_grounding_server2.jsonl"
 data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_200k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
-data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_200k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
 
-val_data_path="/tmp/haozhezhao/MLLMG/jsonl_dir/dreambench_plus_valid.jsonl"
+val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/dreambench_plus_valid.jsonl"
 # val_data_path="/nobackup/zefan/projects/VLGen/LlamaGen/eval_test.jsonl"
 load_from_checkpoint="/tmp/haozhezhao/model/llamagen_t2i/t2i_XL_stage2_512.pt"
+load_from_checkpoint="/tmp/haozhezhao/MLLMG/checkpoint/FIXed_3M_1epoch_step32000.pt"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding_instructblip.pth"
 
@@ -59,7 +62,7 @@ num_workers=8
 nnodes=2
 nproc_per_node=8
 node_rank=0
-eval_steps=1000
+eval_steps=2000
 ckpt_every=2000
 multimodal_encoder="instructblip"
 master_port=25000
@@ -85,11 +88,11 @@ autoregressive/train/train_t2i.py \
 --image_place_holder "<image>" \
 --do_eval \
 --eval_steps ${eval_steps} \
---max_eval_samples 512 \
+--max_eval_samples 400 \
 --cfg-scale 3.5 \
 --top-k 16384 \
 --load_from_checkpoint ${load_from_checkpoint} \
---global-batch-size 80 \
+--global-batch-size 56 \
 --num-workers ${num_workers} \
 --warmup 0.05 \
 --gradient-accumulation-steps 4 \
@@ -102,8 +105,12 @@ autoregressive/train/train_t2i.py \
 --do_recovery \
 --find_unused_parameters \
 --dreambench_eval \
---gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoints/Fix_posEmbedding_Trainall_llamagen_t2i_stage3_subject_instructblip-flan-t5-xl_train_subject_t2i_ti2i_120_w_flux_segment/000-GPT-XL/checkpoints/0048000.pt \
+--gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoints/EmptyFix_Insturctblip_subject_train_all_T5_subject_t2i_ti2i_120_w_flux_segment_noimageonly_empty_fix_train_all/007-GPT-XL/checkpoints/0117000.pt \
 --train_all \
+--load_fixed_llamagen \
+--cls-token-num 512 \
+--fix 'gpt-empty-fix' \
+--save_total_limit 1 \
 # --replace_subject \
 
 # --resume \

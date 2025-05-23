@@ -13,14 +13,17 @@ export NCCL_TIMEOUT=1200  # 调整 NCCL 超时时间（默认600秒）
 
 experiment_name="checkpoints/Fix_posEmbedding_Trainall_llamagen_t2i_stage3_subject_instructblip-flan-t5-xl_train_subject_t2i_ti2i_120_w_flux_segment"
 experiment_name="checkpoints/Empyu_Fix_posEmbedding_cls_512_Trainall_llamagen_t2i_stage3_subject_instructblip-flan-t5-xl_train_subject_t2i_ti2i_120_w_flux_segment"
+
+experiment_name="checkpoints/EmptyFix_Insturctblip_subject_train_all_T5_subject_t2i_ti2i_120_w_flux_segment_noimageonly_empty_fix_train_all"
+
 # model_name_or_path="/nobackup/zefan/projects/VLGen/model/blip2-flan-t5-xl"
 model_name_or_path="/tmp/haozhezhao/model/instructblip-flan-t5-xl"
 
-# data_path="/tmp/haozhezhao/MLLMG/jsonl_dir/subject_ti2i_t2i_stage1.jsonl"
-# data_path="/tmp/haozhezhao/MLLMG/jsonl_dir/subject_ti2i_t2i_stage1_w_flux_segment.jsonl"
-data_path="/tmp/haozhezhao/MLLMG/jsonl_dir/subject_ti2i_t2i_stage1_w_flux_segment_mid_700k.jsonl"
-# val_data_path="/tmp/haozhezhao/MLLMG/jsonl_dir/new_1117_validation_set.jsonl"
-val_data_path="/tmp/haozhezhao/MLLMG/jsonl_dir/new_1117_validation_set.jsonl_mid_1k.jsonl" 
+# data_path="/tmp/haozhezhao/MLLMG/jsonl_data/subject_ti2i_t2i_stage1.jsonl"
+# data_path="/tmp/haozhezhao/MLLMG/jsonl_data/subject_ti2i_t2i_stage1_w_flux_segment.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/jsonl_data/subject_ti2i_t2i_stage1_w_flux_segment_mid_700k.jsonl"
+# val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/new_1117_validation_set.jsonl"
+val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/new_1117_validation_set.jsonl_mid_1k.jsonl" 
 load_from_checkpoint="/tmp/haozhezhao/model/llamagen_t2i/t2i_XL_stage2_512.pt"
 load_from_checkpoint="/tmp/haozhezhao/MLLMG/checkpoint/FIXed_3M_1epoch_step32000.pt"
 # subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
@@ -58,27 +61,28 @@ autoregressive/train/train_t2i.py \
 --image_place_holder "<image>" \
 --do_eval \
 --eval_steps ${eval_steps} \
---max_eval_samples 1024 \
+--max_eval_samples 512 \
 --cfg-scale 7.5 \
 --top-k 16384 \
 --load_from_checkpoint ${load_from_checkpoint} \
---global-batch-size 112 \
+--global-batch-size 64 \
 --num-workers ${num_workers} \
 --warmup 0.05 \
 --gradient-accumulation-steps 1 \
 --train_text_encoder \
 --ckpt-every ${ckpt_every} \
---epochs 3 \
+--epochs 4 \
 --subject_driven \
---reference_data_path /tmp/haozhezhao/MLLMG/cc12m_reference.jsonl \
+--reference_data_path /tmp/haozhezhao/MLLMG/cc12m_reference_tunnel.jsonl \
 --multimodal_encoder ${multimodal_encoder} \
 --find_unused_parameters \
 --cls-token-num 512 \
 --load_subject_embedding ${subject_embedding} \
 --save_total_limit 2 \
 --load_fixed_llamagen \
---unfreeze_output \
-# --train_all \
+--train_all \
+--fix 'gpt-empty-fix'
+# --unfreeze_output \
 
 # --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/New_multiNode_contineT2I_training_21M/006-GPT-XL/checkpoints/0120000.pt \
 # --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/llamagen_t2i_stage3_subject_instructblip_train_only_qformer_T5_subject_t2i_ti2i/030-GPT-XL/checkpoints/0036000.pt \

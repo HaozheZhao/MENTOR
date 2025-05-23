@@ -790,6 +790,7 @@ class LlavaT5ForConditionalGeneration(LlavaT5PreTrainedModel, GenerationMixin):
                     attention_mask = attention_mask.to(language_model_inputs.device)
                 image_embeds_index = torch.where(input_ids == self.sp_token)
                 if inputs_embeds[image_embeds_index].shape[0] != language_model_inputs.reshape(-1,language_model_inputs.shape[-1]).shape[0]:
+                    print("shape mismatch",inputs_embeds[image_embeds_index].shape, language_model_inputs.reshape(-1,language_model_inputs.shape[-1]).shape)
                     language_model_inputs = language_model_inputs.reshape(-1,language_model_inputs.shape[-1])
                     language_model_inputs = language_model_inputs[:inputs_embeds[image_embeds_index].shape[0]]
                     inputs_embeds[image_embeds_index] = language_model_inputs
@@ -802,6 +803,7 @@ class LlavaT5ForConditionalGeneration(LlavaT5PreTrainedModel, GenerationMixin):
 
         inputs_embeds = inputs_embeds[:,-min_padding_size:]
         attention_mask = attention_mask[:,-min_padding_size:]
+
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,

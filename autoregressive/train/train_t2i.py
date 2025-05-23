@@ -457,7 +457,14 @@ def main(args):
                 random_init_uncond_embedding = model.cls_embedding.uncond_embedding.data
                 random_init_uncond_embedding[:120] = uncond_embedding_ckpt
                 checkpoint["model"]["cls_embedding.uncond_embedding"] = random_init_uncond_embedding
-
+            elif args.cls_token_num != 120 and args.load_fixed_llamagen:
+                random_init_uncond_embedding = model.cls_embedding.uncond_embedding.data
+                uncond_embedding_ckpt = checkpoint["model"]['cls_embedding.uncond_embedding']
+                if random_init_uncond_embedding.shape[0] != uncond_embedding_ckpt.shape[0]:
+                    strict = False
+                    checkpoint["model"].pop('cls_embedding.uncond_embedding')
+                    random_init_uncond_embedding[:uncond_embedding_ckpt.shape[0]] = uncond_embedding_ckpt
+                    checkpoint["model"]["cls_embedding.uncond_embedding"] = random_init_uncond_embedding
                 
             result_llama = model.load_state_dict(checkpoint["model"], strict=strict)
             print(f'load generator from pretrained CKPT: {args.load_from_checkpoint} Result: ', result_llama)
@@ -475,7 +482,18 @@ def main(args):
             print(f"loading visual encoder from CKPT {args.gpt_ckpt}, loading result is : {result}")
         
         elif args.multimodal_encoder == 'llava':
-            result = model.load_state_dict(checkpoint["model"], strict=False)
+            if "model" in checkpoint:
+                state_dict = checkpoint["model"]
+            else:
+                state_dict = checkpoint
+            if args.cls_token_num != 120:
+                random_init_uncond_embedding = model.cls_embedding.uncond_embedding.data
+                uncond_embedding_ckpt = state_dict['cls_embedding.uncond_embedding']
+                if random_init_uncond_embedding.shape[0] != uncond_embedding_ckpt.shape[0]:
+                    state_dict.pop('cls_embedding.uncond_embedding')
+                    random_init_uncond_embedding[:uncond_embedding_ckpt.shape[0]] = uncond_embedding_ckpt
+                    state_dict["cls_embedding.uncond_embedding"] = random_init_uncond_embedding
+            result = model.load_state_dict(state_dict, strict=False)
             print(f"loading pretrained generator from CKPT {args.gpt_ckpt}, loading result is : {result}")
 
             
@@ -484,6 +502,14 @@ def main(args):
                 state_dict = checkpoint["model"]
             else:
                 state_dict = checkpoint
+            if args.cls_token_num != 120:
+                random_init_uncond_embedding = model.cls_embedding.uncond_embedding.data
+                uncond_embedding_ckpt = state_dict['cls_embedding.uncond_embedding']
+                if random_init_uncond_embedding.shape[0] != uncond_embedding_ckpt.shape[0]:
+                    state_dict.pop('cls_embedding.uncond_embedding')
+                    random_init_uncond_embedding[:uncond_embedding_ckpt.shape[0]] = uncond_embedding_ckpt
+                    state_dict["cls_embedding.uncond_embedding"] = random_init_uncond_embedding
+                
             model.load_state_dict(state_dict, strict=True)
         if args.resume:
             optimizer.load_state_dict(checkpoint["optimizer"])

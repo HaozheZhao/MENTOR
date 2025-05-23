@@ -34,9 +34,14 @@ experiment_name="checkpoint/LLAVAT5Trainall_just_segment_pretrain_stage3_dreambe
 
 experiment_name="checkpoint/LLAVAT5Fixed_just_segment_pretrain_stage3_dreambench__recap_200k_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg"
 
+experiment_name="checkpoint/Afteri2i_100kckpt_LLAVAT5_empty_Fixed_just_segment_pretrain_stage3_dreambench__recap_400k_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg_3e4"
+
+experiment_name="checkpoint/Afteri2i_100kckpt_LLAVAT5_empty_Fixed_just_segment_pretrain_stage3_dreambench__recap_400k_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg_5e4_epoch1"
+
+experiment_name="checkpoint/WithUltra_Afteri2i_100kckpt_LLAVAT5_empty_Fixed_just_segment_pretrain_stage3_dreambench__recap_400k_t2i_400k_flux_200k_midjourney_150k_recovery_150k_1e4_epoch1_always_rotated"
 
 # model_name_or_path="/nobackup/zefan/projects/VLGen/model/blip2-flan-t5-xl"
-model_name_or_path="/home/jovyan/model/blip2-flan-t5-xl"
+model_name_or_path="/tmp/haozhezhao/model/blip2-flan-t5-xl"
 
 # data_path="/nobackup/zefan/projects/VLGen/LlamaGen/new_1119_train_set_mixed.jsonl"
 # data_path="/nobackup/zefan/projects/VLGen/LlamaGen/train_set_subject_200k.jsonl"
@@ -51,19 +56,19 @@ data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_600
 data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_600k_400k_flux_200k_midjourney_200k_recovery_100k_grounding.jsonl"
 data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_600k_flux_200k_recovery_100k_grounding.jsonl"
 data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_200k_recap_t2i_300k_flux_100k_recovery_100k_grounding.jsonl"
-data_path="/home/jovyan/MLLMG/merged_train_set_set_subject_400k_recap_t2i_400k_flux_100k_recovery_100k_grounding_server2.jsonl"
-data_path="/home/jovyan/MLLMG/jsonl_data/merged_train_set_set_subject_200k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
-# data_path="/home/jovyan/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
-# data_path="/home/jovyan/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap_no_t2i_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
-# data_path="/home/jovyan/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap.jsonl"
-val_data_path="/home/jovyan/MLLMG/jsonl_dir/dreambench_plus_valid.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/merged_train_set_set_subject_400k_recap_t2i_400k_flux_100k_recovery_100k_grounding_server2.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_200k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap_t2i_400k_flux_200k_midjourney_150k_recovery_150k_grounding_100fluxseg_50samseg.jsonl"
+data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap_500K_UltraEdit_t2i_400k_flux_200k_midjourney_150k_recovery.jsonl"
+# data_path="/tmp/haozhezhao/MLLMG/jsonl_data/merged_train_set_set_subject_400k_recap.jsonl"
+val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/dreambench_plus_valid.jsonl"
 # val_data_path="/nobackup/zefan/projects/VLGen/LlamaGen/eval_test.jsonl"
-load_from_checkpoint="/home/jovyan/model/llamagen_t2i/t2i_XL_stage2_512.pt"
-load_from_checkpoint="/home/jovyan/MLLMG/checkpoint/FIXed_3M_1epoch_step32000.pt"
+load_from_checkpoint="/tmp/haozhezhao/model/llamagen_t2i/t2i_XL_stage2_512.pt"
+load_from_checkpoint="/tmp/haozhezhao/MLLMG/checkpoint/FIXed_3M_1epoch_step32000.pt"
 
-subject_embedding="/home/jovyan/MLLMG/subject_embedding.bin"
-# subject_embedding="/home/jovyan/MLLMG/subject_embedding_instructblip.pth"
-language_projection="/home/jovyan/LLaVA/checkpoints/llava-v1.5-flant5_fixed-pretrain/mm_projector.bin"
+subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
+# subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding_instructblip.pth"
+language_projection="/tmp/haozhezhao/MLLMG/llava-v1.5-flant5_fixed-pretrain/mm_projector.bin"
 
 lr=1e-4
 num_workers=8
@@ -83,12 +88,12 @@ torchrun \
 --nproc_per_node=$nproc_per_node \
 --node_rank=$node_rank \
 autoregressive/train/train_t2i.py \
---vq-ckpt /home/jovyan/model/llamagen_t2i/vq_ds16_t2i.pt \
+--vq-ckpt /tmp/haozhezhao/model/llamagen_t2i/vq_ds16_t2i.pt \
 --data-path ${data_path} \
 --dataset ti2i \
 --image-size 512 \
 --results-dir ${experiment_name} \
---cloud-save-path ~/MLLMG/checkpoint \
+--cloud-save-path /tmp/haozhezhao/checkpoint \
 --lr ${lr} \
 --val_data_path ${val_data_path} \
 --use_vision_tower \
@@ -100,34 +105,35 @@ autoregressive/train/train_t2i.py \
 --cfg-scale 7.5 \
 --top-k 16384 \
 --load_from_checkpoint ${load_from_checkpoint} \
---global-batch-size 72 \
+--global-batch-size 64 \
 --num-workers ${num_workers} \
 --warmup 0.05 \
 --gradient-accumulation-steps 4 \
 --train_text_encoder \
 --ckpt-every ${ckpt_every} \
---epochs 4 \
+--epochs 1 \
 --subject_driven \
---reference_data_path /home/jovyan/MLLMG/cc12m_reference.jsonl \
+--reference_data_path /tmp/haozhezhao/MLLMG/cc12m_reference_tunnel.jsonl \
 --multimodal_encoder ${multimodal_encoder} \
 --do_recovery \
 --find_unused_parameters \
 --cls-token-num 512 \
 --dreambench_eval \
---save_total_limit 2 \
+--save_total_limit 1 \
 --load_language_projection ${language_projection} \
---gpt-ckpt /home/jovyan/MLLMG/checkpoints/llavat5_subject_train_all_T5_subject_t2i_ti2i_120_w_flux_segment_noimageonly_newfix_train_only/003-GPT-XL/checkpoints/0056000.pt \
+--gpt-ckpt /tmp/haozhezhao/MLLMG_ckpkts/checkpoints/AfterI2I_llavat5_subject_train_all_T5_subject_t2i_ti2i_120_w_flux_segment_noimageonly_empty_fix_train_all/0100000.pt \
 --mm_vision_tower "openai/clip-vit-large-patch14" \
 --train_all \
 --load_fixed_llamagen \
+--fix 'gpt-empty-fix' \
+# --resume \
 
 # --load_subject_embedding ${subject_embedding} \
 # --replace_subject \
 
-# --gpt-ckpt /home/jovyan/MLLMG/llamagen_t2i_stage3_subject_instructblip_train_except_t5_vit_llamagen_alllayers_no_norm_output/003-GPT-XL/checkpoints/0044000.pt \
+# --gpt-ckpt /tmp/haozhezhao/MLLMG/llamagen_t2i_stage3_subject_instructblip_train_except_t5_vit_llamagen_alllayers_no_norm_output/003-GPT-XL/checkpoints/0044000.pt \
 # --replace_subject \
-# --gpt-ckpt /home/jovyan/MLLMG/checkpoint/BLIP2Trainall_stage3_dreambench_recap_Subject200k_filtered_t2i_flux400k_200kmid_recovery_150k_extract_150k_100_fluxseg_50samseg_trainall_1e4/004-GPT-XL/checkpoints/0008000.pt \
-# --resume \
+# --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/BLIP2Trainall_stage3_dreambench_recap_Subject200k_filtered_t2i_flux400k_200kmid_recovery_150k_extract_150k_100_fluxseg_50samseg_trainall_1e4/004-GPT-XL/checkpoints/0008000.pt \
 # --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/llamagen_t2i_stage3_subject_instructblip_train_only_qformer_T5_subject_t2i_ti2i/004-GPT-XL/checkpoints/0036000.pt \
 
 # --gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/llamagen_t2i_stage3_subject_instructblip_train_only_qformer_T5_subject_t2i_ti2i/031-GPT-XL/checkpoints/0048000.pt \

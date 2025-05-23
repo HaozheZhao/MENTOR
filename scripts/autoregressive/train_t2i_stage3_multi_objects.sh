@@ -29,7 +29,7 @@ experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_dr
 
 experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects"
 
-experiment_name="checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects_no_overlap"
+experiment_name="checkpoint/EmptyFix_InstructBlip_just_segment_pretrain_stage3_multiobjects_no_overlap"
 
 # model_name_or_path="/nobackup/zefan/projects/VLGen/model/blip2-flan-t5-xl"
 model_name_or_path="/tmp/haozhezhao/model/instructblip-flan-t5-xl"
@@ -56,6 +56,7 @@ val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_molom_imagenet_flux
 val_data_path="/tmp/haozhezhao/MLLMG/jsonl_data/multiobjects_filtered_val.jsonl"
 # val_data_path="/nobackup/zefan/projects/VLGen/LlamaGen/eval_test.jsonl"
 load_from_checkpoint="/tmp/haozhezhao/model/llamagen_t2i/t2i_XL_stage2_512.pt"
+load_from_checkpoint="/tmp/haozhezhao/MLLMG/checkpoint/FIXed_3M_1epoch_step32000.pt"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding.bin"
 subject_embedding="/tmp/haozhezhao/MLLMG/subject_embedding_instructblip.pth"
 
@@ -65,7 +66,7 @@ num_workers=4
 nnodes=2
 nproc_per_node=8
 node_rank=0
-eval_steps=1000
+eval_steps=2000
 ckpt_every=2000
 multimodal_encoder="instructblip"
 master_port=25000
@@ -91,11 +92,11 @@ autoregressive/train/train_t2i.py \
 --image_place_holder "<image>" \
 --do_eval \
 --eval_steps ${eval_steps} \
---max_eval_samples 500 \
+--max_eval_samples 200 \
 --cfg-scale 7.5 \
 --top-k 16384 \
 --load_from_checkpoint ${load_from_checkpoint} \
---global-batch-size 96 \
+--global-batch-size 56 \
 --num-workers ${num_workers} \
 --warmup 0.05 \
 --gradient-accumulation-steps 4 \
@@ -107,10 +108,13 @@ autoregressive/train/train_t2i.py \
 --multimodal_encoder ${multimodal_encoder} \
 --do_recovery \
 --find_unused_parameters \
+--cls-token-num 512 \
 --train_all \
---fix 'gpt-zero-fix' \
---gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/zeroFix_InstructBlip_just_segment_pretrain_stage3_multiobjects_no_overlap/010-GPT-XL/checkpoints/0008000.pt \
---resume \
+--load_fixed_llamagen \
+--fix 'gpt-empty-fix' \
+--save_total_limit 1 \
+--gpt-ckpt /tmp/haozhezhao/MLLMG/checkpoint/EmptyFix_InstructBlip_just_segment_pretrain_stage3_dreambench_recap_Subject400k_filtered_t2i_flux400k_200kmid_recovery_150k_extract_150k_100_fluxseg_50samseg_trainall_1e4_no_replace/007-GPT-XL/checkpoints/0092000.pt \
+# --resume \
 
 # --no-compile \
 

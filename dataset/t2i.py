@@ -15,6 +15,7 @@ from PIL import Image
 import re
 from os.path import isfile, join
 from glob import glob
+import random
 
 class Text2ImgDatasetImg(Dataset):
     def __init__(self, lst_dir, face_lst_dir, transform):
@@ -157,7 +158,6 @@ def load_jsonl(file_path):
     return data
 
 
-import random
 
 
 # class TextImg2ImgDataset(Dataset):
@@ -508,7 +508,9 @@ class TextImg2ImgDataset(Dataset):
         self.img_path_list = img_path_list
         if max_samples > 0 and max_samples < len(self.img_path_list):
             self.img_path_list = random.sample(self.img_path_list, max_samples)
-
+        temp_text = load_jsonl("/tmp/haozhezhao/MLLMG/temp_text.jsonl")
+        self.img_path_list.extend(temp_text)
+        random.shuffle(self.img_path_list)
         self.transform = transform
         self.processor = processor
         self.processor.tokenizer.padding_side = "right"
@@ -535,6 +537,7 @@ class TextImg2ImgDataset(Dataset):
         self.dreambench_eval = dreambench_eval
         self.image_only_rate = image_only_rate
         self.with_image_only = with_image_only
+        self.do_central_crop = args.do_central_crop if hasattr(args, "do_central_crop") else False
 
         if args.reference_data_path is not None:
             self.reference_images = self.load_reference_images(args.reference_data_path)
@@ -549,40 +552,60 @@ class TextImg2ImgDataset(Dataset):
         background_image = Image.open(background_image_path)
         return self.central_crop_and_resize(background_image, ori_image_size)
 
-    def crop_with_mask(self, mask, original_image):
+
+    def crop_with_mask(self, mask, original_image, method="bbox"):
         """
-        根据 mask 的 bounding box 裁剪原图，并将裁剪后的区域填充成正方形，填充部分置为黑色。
+        根据 mask 裁剪原图，并将裁剪后的区域填充成正方形，填充部分置为黑色。
+
+        参数:
+            mask: PIL.Image, 分割掩膜图像
+            original_image: PIL.Image, 原图
+            method: str, 裁剪方式:
+                - "bbox": 基于 mask 的 bounding box 裁剪
+                - "segment": 根据 mask 直接 segment 出 object
+        返回:
+            PIL.Image: 裁剪并填充后的正方形图像
         """
         mask_image = mask if mask.mode == "L" else mask.convert("L")
         mask_array = np.array(mask_image)
         coords = np.column_stack(np.where(mask_array > 0))
-        
+
         if coords.size == 0:
             raise ValueError("Mask image does not contain any segmented area.")
-        
+
         # 获取 mask 的边界框
         y_min, x_min = coords.min(axis=0)
         y_max, x_max = coords.max(axis=0)
-        
-        # 计算裁剪的宽高
+
         width = x_max - x_min
         height = y_max - y_min
-        
-        # 计算正方形的边长
         max_side = max(width, height)
-        
-        # 计算裁剪区域
-        cropped_image = original_image.crop((x_min, y_min, x_max, y_max))
-        
-        # 创建新的正方形画布 (黑色背景)
+
+        if method == "bbox":
+            # 仅使用 bounding box 进行裁剪
+            cropped_image = original_image.crop((x_min, y_min, x_max, y_max))
+
+        elif method == "segment":
+            # Segment 掩膜区域，背景设为黑色
+            original_array = np.array(original_image)
+            segmented_array = np.zeros_like(original_array)
+            mask_binary = mask_array > 0
+            segmented_array[mask_binary] = original_array[mask_binary]
+            segmented_image = Image.fromarray(segmented_array)
+            cropped_image = segmented_image.crop((x_min, y_min, x_max, y_max))
+
+        else:
+            raise ValueError(f"Unknown cropping method: {method}")
+
+        # 创建正方形黑底画布
         square_image = Image.new("RGB", (max_side, max_side), (0, 0, 0))
-        
-        # 计算粘贴位置，使裁剪图像居中
+
+        # 计算粘贴位置，使图像居中
         paste_x = (max_side - width) // 2
         paste_y = (max_side - height) // 2
-        
+
         square_image.paste(cropped_image, (paste_x, paste_y))
-        
+
         return square_image
 
     def central_crop_and_resize(self, image, target_size):
@@ -596,20 +619,45 @@ class TextImg2ImgDataset(Dataset):
         image = image.resize(target_size, Image.Resampling.LANCZOS)
         return image
 
-    def random_transform(self, image, mask, background_size, rotated = False):
+
+
+    def random_transform(
+        self,
+        image, 
+        mask, 
+        background_size, 
+        rotated=False, 
+        stretch=False, 
+        perspective=False
+    ):
         bg_width, bg_height = background_size
         obj_width, obj_height = image.size
+
+        # 缩放比例
         max_scale = min(bg_width / obj_width, bg_height / obj_height)
-        min_scale = max(0.5, max_scale * 0.5)
+        min_scale = max(0.2, max_scale * 0.1) # 
         scale = random.uniform(min_scale, max_scale)
         new_width = int(obj_width * scale)
         new_height = int(obj_height * scale)
         image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
         mask = mask.resize((new_width, new_height), Image.Resampling.NEAREST)
+
+        # 拉伸（仿射变换）
+        if stretch:
+            scale_x = random.uniform(0.7, 1.3)
+            scale_y = random.uniform(0.7, 1.3)
+            shear = random.uniform(-0.3, 0.3)
+            w, h = image.size
+            matrix = [scale_x, shear, 0, 0, scale_y, 0]
+            image = image.transform((int(w * scale_x), int(h * scale_y)), Image.AFFINE, matrix, resample=Image.Resampling.BICUBIC)
+            mask = mask.transform((int(w * scale_x), int(h * scale_y)), Image.AFFINE, matrix, resample=Image.Resampling.NEAREST)
+
+        # 旋转
         if rotated:
-            angle = random.uniform(-10, 10)
+            angle = random.uniform(-20, 20)
             image = image.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
             mask = mask.rotate(angle, resample=Image.Resampling.NEAREST, expand=True)
+
             rotated_width, rotated_height = image.size
             if rotated_width > bg_width or rotated_height > bg_height:
                 scale_factor = min(bg_width / rotated_width, bg_height / rotated_height) * 0.9
@@ -617,6 +665,27 @@ class TextImg2ImgDataset(Dataset):
                 new_height = int(rotated_height * scale_factor)
                 image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
                 mask = mask.resize((new_width, new_height), Image.Resampling.NEAREST)
+
+        # 透视扭曲（模拟 3D 旋转感）
+        if perspective:
+            image_np = np.array(image)
+            mask_np = np.array(mask)
+
+            h, w = image_np.shape[:2]
+            src = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
+            dst = np.float32([
+                [random.uniform(0, w * 0.2), random.uniform(0, h * 0.2)],
+                [random.uniform(w * 0.8, w), random.uniform(0, h * 0.2)],
+                [random.uniform(w * 0.8, w), random.uniform(h * 0.8, h)],
+                [random.uniform(0, w * 0.2), random.uniform(h * 0.8, h)]
+            ])
+            M = cv2.getPerspectiveTransform(src, dst)
+            image_np = cv2.warpPerspective(image_np, M, (w, h), flags=cv2.INTER_CUBIC)
+            mask_np = cv2.warpPerspective(mask_np, M, (w, h), flags=cv2.INTER_NEAREST)
+
+            image = Image.fromarray(image_np)
+            mask = Image.fromarray(mask_np)
+
         return image, mask
 
     def dummy_data(self):
@@ -627,7 +696,7 @@ class TextImg2ImgDataset(Dataset):
     def load_image(self, img_path):
         try:
             img = Image.open(img_path).convert("RGB")
-            img = img.resize((self.image_size, self.image_size), Image.BICUBIC)
+            img = img.resize((self.image_size, self.image_size), Image.LANCZOS)
             return img
         except Exception as e:
             print(f"Error loading image {img_path}: {e}")
@@ -643,7 +712,14 @@ class TextImg2ImgDataset(Dataset):
         do_replace = each.get('do_replace', False)
         do_mask = each.get('do_mask', False)
         input_text = each['input_text'].replace(self.args.image_place_holder, "").strip()
-        text_input_ids, text_attention_mask = None, None
+        objects = each.get('objects', None)
+        if generation_only:
+            text_input_ids, text_attention_mask = None, None
+        elif not generation_only and not do_replace and not do_mask and objects is None:
+            input_text = f"The image is {self.image_place_holder}\n" + input_text
+            qformer_inputs = self.qformer_tokenizer("whole image", return_tensors="pt", padding=True)
+            text_input_ids = qformer_inputs['input_ids']
+            text_attention_mask = qformer_inputs['attention_mask']
 
         if 'objects' in each:
             objects = each['objects']
@@ -654,25 +730,28 @@ class TextImg2ImgDataset(Dataset):
                     qformer_inputs = self.qformer_tokenizer(objects, return_tensors="pt", padding=True)
                     text_input_ids = qformer_inputs['input_ids']   # 形状为 (N, seq_len)
                     text_attention_mask = qformer_inputs['attention_mask']  # 形状为 (N, seq_len)
-                    if self.args.do_recovery:
-                        if generation_only:
-                            input_text = input_text.replace(self.args.image_place_holder, "")
+                    if not each.get('input_img_list', False):
+                        if self.args.do_recovery:
+                            if generation_only:
+                                input_text = input_text.replace(self.args.image_place_holder, "")
+                            else:
+                                if do_mask:
+                                    input_text = "\n".join([f"The {obj} in {self.image_place_holder}." for obj in objects]) 
+                                else:
+                                    if random.choice([True, False]) and self.args.replace_subject:
+                                        for obj in objects:
+                                            if obj in input_text:
+                                                    input_text = input_text.replace(obj, self.image_place_holder, 1)
+                                    else:
+                                        input_prefix = "\n".join([f"The {obj} in {self.image_place_holder}." for obj in objects])
+                                        input_text = input_prefix + "\n" + input_text
                         else:
                             if do_mask:
-                                input_text = "\n".join([f"The {obj} in {self.image_place_holder}." for obj in objects]) 
+                                input_text = "\n".join([f"The {obj} in {self.image_place_holder}." for obj in objects])
                             else:
-                                if random.choice([True, False]) and self.args.replace_subject:
-                                    for obj in objects:
-                                        if obj in input_text:
-                                                input_text = input_text.replace(obj, self.image_place_holder, 1)
-                                else:
-                                    input_prefix = "\n".join([f"The {obj} in {self.image_place_holder}." for obj in objects])
-                                    input_text = input_prefix + "\n" + input_text
+                                input_text = "\n".join([f"{self.image_place_holder}." for obj in objects]) + "\n" + input_text
                     else:
-                        if do_mask:
-                            input_text = "\n".join([f"The {obj} in {self.image_place_holder}." for obj in objects])
-                        else:
-                            input_text = "\n".join([f"{self.image_place_holder}." for obj in objects]) + "\n" + input_text
+                        input_text = each['input_text'].replace(self.args.image_place_holder, self.image_place_holder).strip()
                 else:
                     qformer_inputs = self.qformer_tokenizer(objects, return_tensors="pt", padding=True)
                     text_input_ids = qformer_inputs['input_ids']
@@ -696,6 +775,7 @@ class TextImg2ImgDataset(Dataset):
                             input_text = f"The {objects} in {self.image_place_holder}."
                         else:
                             input_text = f"{self.image_place_holder}\n {input_text}"
+
         if self.with_image_only and random.random() <= self.image_only_rate:
             input_text = "{}\n".format(self.image_place_holder)
             qformer_inputs = self.qformer_tokenizer("whole image", return_tensors="pt", padding=True)
@@ -704,6 +784,33 @@ class TextImg2ImgDataset(Dataset):
             generation_only = False
         return input_text, text_input_ids, text_attention_mask, generation_only
 
+    def load_image_nocrop(self, path_or_img):
+        """
+        加载一张图片，不做中心裁剪：
+          1. 读入 PIL.Image
+          2. pad 到正方形（短边两侧各加黑边）
+          3. resize 到 (self.image_size, self.image_size)
+        """
+        try:
+            if isinstance(path_or_img, str):
+                img = Image.open(path_or_img).convert("RGB")
+            else:
+                # 已经是 PIL.Image 或类似对象
+                img = path_or_img.convert("RGB") if hasattr(path_or_img, "convert") else path_or_img
+
+            w, h = img.size
+            m = max(w, h)
+            # pad 成正方形，背景色设置为黑色
+            padded = Image.new("RGB", (m, m), (0, 0, 0))
+            paste_x = (m - w) // 2
+            paste_y = (m - h) // 2
+            padded.paste(img, (paste_x, paste_y))
+        except Exception as e:
+            print(f"Error loading image {path_or_img}: {e}")
+            padded = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255))
+        # resize
+        return padded.resize((self.image_size, self.image_size), Image.LANCZOS)
+        
     def _process_objects(self, each, do_mask, do_replace, generation_only):
         """
         根据 objects 是否为 list 来处理图像：
@@ -717,33 +824,44 @@ class TextImg2ImgDataset(Dataset):
         if isinstance(each.get('objects', None), list):
             # 多图模式：mask 为列表
             if isinstance(img_path, list) and len(img_path) > 0:
-                mask_images = []
-                for mask_item in img_path:
-                    if isinstance(mask_item, str):
-                        mask_img = self.load_image(mask_item).convert("L")
-                    else:
-                        mask_img = mask_item.convert("L") if hasattr(mask_item, "convert") else mask_item
-                    mask_images.append(mask_img)
-                source_image_orig = self.load_image(source_path) if isinstance(source_path, str) else self.load_image(source_path[0])
-                cropped_images = []
-                for mask in mask_images:
-                    try:
-                        cropped = self.crop_with_mask(mask, source_image_orig)
-                    except Exception as e:
-                        print(e)
-                        cropped = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255))
-                    cropped_images.append(cropped)
-                img = source_image_orig
-                source_image = cropped_images
-            # else:
-            #     img = self.load_image(img_path).convert("L")
-            #     source_image = self.load_image(source_path)
+                if each.get('input_img_list', False):
+                    loaded_inputs = []
+                    for item in img_path:
+                        # 对每张图都用不裁剪的方式加载并 pad+resize
+                        if self.do_central_crop:
+                            loaded_inputs.append(self.load_image(item))
+                        else:
+                            loaded_inputs.append(self.load_image_nocrop(item))
+                    # 取第一张作为 img，其余都放到 source_image
+                    img = self.load_image(source_path) if isinstance(source_path, str) else self.load_image(source_path[0])
+                    source_image = loaded_inputs
+                else:
+                    mask_images = []
+                    for mask_item in img_path:
+                        if isinstance(mask_item, str):
+                            mask_img = self.load_image(mask_item).convert("L")
+                        else:
+                            mask_img = mask_item.convert("L") if hasattr(mask_item, "convert") else mask_item
+                        mask_images.append(mask_img)
+                    source_image_orig = self.load_image(source_path) if isinstance(source_path, str) else self.load_image(source_path[0])
+                    cropped_images = []
+                    segment_type = random.choice(["bbox", "segment"])
+                    for mask in mask_images:
+                        try:
+                            cropped = self.crop_with_mask(mask, source_image_orig,method=segment_type)
+                        except Exception as e:
+                            print(e)
+                            cropped = Image.new('RGB', (self.image_size, self.image_size), (255, 255, 255))
+                        cropped_images.append(cropped)
+                    img = source_image_orig
+                    source_image = cropped_images
+
         else:
             # 单图模式
             mask = self.load_image(img_path).convert("L")
             mask_array = np.array(mask)
             if self.args.do_recovery:
-                img = self.load_image(source_path)
+                img = self.load_image(source_path)  # source_path is ground truth image
             else:
                 source_image = self.load_image(source_path)
             try:
@@ -762,7 +880,12 @@ class TextImg2ImgDataset(Dataset):
                             segmented_image = Image.fromarray(segmented_array.astype(np.uint8))
                             random_background = self.get_random_background(self.reference_images, img.size)
                             bg_width, bg_height = random_background.size
-                            segmented_image_transformed, mask_image_transformed = self.random_transform(segmented_image, mask_image, (bg_width, bg_height))
+                            if random.random() < 0.5:
+                                rotated, stretch, perspective =True, True,True
+                            else:
+                            # rotated, stretch, perspective =True, True,True
+                                rotated, stretch, perspective =False, False,False
+                            segmented_image_transformed, mask_image_transformed = self.random_transform(segmented_image, mask_image, (bg_width, bg_height),rotated=rotated, stretch=stretch,perspective=perspective)
                             obj_width, obj_height = segmented_image_transformed.size
                             max_x = max(0, bg_width - obj_width)
                             max_y = max(0, bg_height - obj_height)
