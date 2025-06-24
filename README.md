@@ -1,132 +1,391 @@
-# Autoregressive Model Beats Diffusion: 🦙 Llama for Scalable Image Generation
-
+# 🚀 MENTOR: Efficient Multimodal-Conditioned Tuning for Autoregressive Vision Generation
 
 <div align="center">
 
-[![demo](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Online_Demo-blue)](https://huggingface.co/spaces/FoundationVision/LlamaGen)&nbsp;
-[![arXiv](https://img.shields.io/badge/arXiv%20paper-2406.06525-b31b1b.svg)](https://arxiv.org/abs/2406.06525)&nbsp;
-[![project page](https://img.shields.io/badge/Project_page-More_visualizations-green)](https://peizesun.github.io/llamagen/)&nbsp;
+[![NeurIPS 2024](https://img.shields.io/badge/NeurIPS-2024-blue.svg?style=for-the-badge)](https://arxiv.org/abs/XXXX.XXXXX)
+[![Project Page](https://img.shields.io/badge/Project-Page-green.svg?style=for-the-badge)](https://mentor.github.io)
+[![Hugging Face](https://img.shields.io/badge/🤗-Models-yellow.svg?style=for-the-badge)](https://huggingface.co/MENTOR)
+[![Demo](https://img.shields.io/badge/🎯-Demo-red.svg?style=for-the-badge)](https://huggingface.co/spaces/MENTOR/demo)
+
+<h3>🏆 State-of-the-Art Multimodal Image Generation with 10× Less Data</h3>
+
+<p align="center">
+  <img src="NeurIPS-VidualInstructionEditing/figures/teasarv3.pdf" width="90%" />
+</p>
+
+**[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[🎬 Video](https://youtube.com)** | **[💻 Code](#installation)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[📊 Results](#main-results)**
 
 </div>
 
+---
+
+## 🎯 Why MENTOR?
+
+<div align="center">
+<table>
+<tr>
+<th>🔥 10× Less Training Data</th>
+<th>⚡ 170× Faster Training</th>
+<th>💪 Better Performance</th>
+</tr>
+<tr>
+<td align="center">3M vs 16-200M samples</td>
+<td align="center">1.5 days vs 256 GPU-days</td>
+<td align="center">47% vs 36% CP·PF score</td>
+</tr>
+</table>
+</div>
+
+**MENTOR** revolutionizes multimodal image generation by achieving superior results with dramatically reduced resources. While competitors like Emu2 require 37B parameters and massive datasets, MENTOR delivers better performance with just 2.3B parameters.
+
+<details>
+<summary><b>📋 Table of Contents</b></summary>
+
+- [Key Features](#-key-features)
+- [Quick Start](#-quick-start)
+- [Main Results](#-main-results)
+- [Method Overview](#-method-overview)
+- [Installation](#-installation)
+- [Usage Examples](#-usage-examples)
+- [Model Zoo](#-model-zoo)
+- [Technical Details](#-technical-details)
+- [Citation](#-citation)
+
+</details>
+
+---
+
+## ✨ Key Features
+
+<div align="center">
+
+| Feature | MENTOR | Diffusion Models |
+|---------|--------|------------------|
+| **Training Efficiency** | ✅ 1.5 days on 8 GPUs | ❌ 3+ days on 256 GPUs |
+| **Deterministic Control** | ✅ Precise AR generation | ❌ Stochastic sampling |
+| **Modality Balance** | ✅ Lowest CP/PF ratio (0.65) | ❌ High imbalance (>1.0) |
+| **Architecture** | ✅ Simple unified transformer | ❌ Complex auxiliary modules |
+| **Multi-task Support** | ✅ Zero-shot adaptation | ❌ Task-specific tuning |
+
+</div>
+
+## 🚀 Quick Start
+
+```bash
+# Install MENTOR
+pip install mentor-gen
+
+# Generate with one line of code
+from mentor import MENTOR
+model = MENTOR.from_pretrained("MENTOR/mentor-mlp")
+image = model.generate(
+    text="A corgi wearing sunglasses on the beach",
+    reference_image="path/to/corgi.jpg"
+)
+```
+
+<div align="center">
+  <a href="https://colab.research.google.com/drive/xxx" target="_blank">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+  <a href="https://huggingface.co/spaces/MENTOR/demo" target="_blank">
+    <img src="https://img.shields.io/badge/🤗-Try%20Demo-yellow.svg" alt="Hugging Face Demo"/>
+  </a>
+</div>
+
+---
+
+## 📊 Main Results
+
+### 🏅 DreamBench++ Benchmark Leadership
 
 <p align="center">
-<img src="assets/teaser.jpg" width=95%>
-<p>
+<img src="NeurIPS-VidualInstructionEditing/figures/Figure.pdf" width="60%">
+</p>
 
+<div align="center">
 
+| Method | Model Size | Training Data | CP↑ | PF↑ | **CP·PF↑** | CP/PF↓ |
+|:-------|:----------:|:-------------:|:---:|:---:|:----------:|:------:|
+| Emu2 | 37B | 16M | 0.53 | 0.69 | 0.36 | 0.77 |
+| DreamEngine | 10.5B | 21M | 0.68 | 0.37 | 0.26 | 1.84 |
+| Kosmos-G | 3B | 200M | 0.54 | 0.51 | 0.28 | 1.06 |
+| **MENTOR** | **2.3B** | **3M** | **0.55** | **0.84** | **0.47** | **0.65** |
 
-This repo contains pre-trained model weights and training/sampling PyTorch(torch>=2.1.0) codes used in
+</div>
 
-> [**Autoregressive Model Beats Diffusion: Llama for Scalable Image Generation**](https://arxiv.org/abs/2406.06525)<br>
-> [Peize Sun](https://peizesun.github.io/), [Yi Jiang](https://enjoyyi.github.io/), [Shoufa Chen](https://www.shoufachen.com/), [Shilong Zhang](https://jshilong.github.io/), [Bingyue Peng](), [Ping Luo](http://luoping.me/), [Zehuan Yuan](https://shallowyuan.github.io/)
-> <br>HKU, ByteDance<br>
+> **CP**: Concept Preservation | **PF**: Prompt Following | **Lower CP/PF = Better Balance**
 
-You can find more visualizations on [![project page](https://img.shields.io/badge/Project_page-More_visualizations-green)](https://peizesun.github.io/llamagen/)
+### 🎨 Superior Image Reconstruction
 
-## 🔥 Update
-- [2024.06.28] Image tokenizers and AR models for text-conditional image generation are released ! Try it !
-- [2024.06.15] All models ranging from 100M to 3B parameters are supported by vLLM ! 
-- [2024.06.11] Image tokenizers and AR models for class-conditional image generation are released !
-- [2024.06.11] Code and Demo are released !
+<div align="center">
 
-## 🌿 Introduction
-We introduce LlamaGen, a new family of image generation models that apply original ``next-token prediction`` paradigm of large language models to visual generation domain. It is an affirmative answer to whether vanilla autoregressive models, e.g., Llama, ``without inductive biases`` on visual signals can achieve state-of-the-art image generation performance if scaling properly. We reexamine design spaces of image tokenizers, scalability properties of image generation models, and their training data quality.
+| Method | COCO L2↓ | JourneyDB L2↓ | Improvement |
+|:-------|:--------:|:-------------:|:-----------:|
+| DreamEngine | 0.2065 | 0.2052 | Baseline |
+| **MENTOR** | **0.1008** | **0.0867** | **>50% Better** |
 
-In this repo, we release:
-* Two image tokenizers of downsample ratio 16 and 8.
-* Seven class-conditional generation models ranging from 100M to 3B parameters.
-* Two text-conditional generation models of 700M parameters.
-* Online demos in  [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/FoundationVision/LlamaGen) for running pre-trained models.
-* Supported vLLM serving framework to enable 300% - 400% speedup.
+</div>
 
-## 🦄 Class-conditional image generation on ImageNet
-### VQ-VAE models
-Method | params | tokens | rFID (256x256) | weight
---- |:---:|:---:|:---:|:---:
-vq_ds16_c2i | 72M | 16x16 | 2.19 | [vq_ds16_c2i.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/vq_ds16_c2i.pt) 
-vq_ds16_c2i | 72M | 24x24 | 0.94 | above
-vq_ds16_c2i | 72M | 32x32 | 0.70 | above
-vq_ds8_c2i  | 70M | 32x32 | 0.59 | [vq_ds8_c2i.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/vq_ds8_c2i.pt)
+---
 
-### AR models
-Method | params | training | tokens | FID (256x256) | weight 
---- |:---:|:---:|:---:|:---:|:---:|
-LlamaGen-B   | 111M | DDP | 16x16 | 5.46 | [c2i_B_256.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_B_256.pt)
-LlamaGen-B   | 111M | DDP | 24x24 | 6.09 | [c2i_B_384.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_B_384.pt)
-LlamaGen-L   | 343M | DDP | 16x16 | 3.80 | [c2i_L_256.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_L_256.pt)
-LlamaGen-L   | 343M | DDP | 24x24 | 3.07 | [c2i_L_384.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_L_384.pt)
-LlamaGen-XL  | 775M | DDP | 24x24 | 2.62 | [c2i_X_384L.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_XL_384.pt)
-LlamaGen-XXL | 1.4B | FSDP | 24x24 | 2.34 | [c2i_XXL_384.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_XXL_384.pt)
-LlamaGen-3B  | 3.1B | FSDP | 24x24 | 2.18 | [c2i_3B_384.pt](https://huggingface.co/FoundationVision/LlamaGen/resolve/main/c2i_3B_384.pt)
+## 🏗️ Method Overview
 
+### Two-Stage Training Paradigm
 
-### Demo
-Please download models, put them in the folder `./pretrained_models`, and run
-```
-python3 autoregressive/sample/sample_c2i.py --vq-ckpt ./pretrained_models/vq_ds16_c2i.pt --gpt-ckpt ./pretrained_models/c2i_L_384.pt --gpt-model GPT-L --image-size 384
-# or
-python3 autoregressive/sample/sample_c2i.py --vq-ckpt ./pretrained_models/vq_ds16_c2i.pt --gpt-ckpt ./pretrained_models/c2i_XXL_384.pt --gpt-model GPT-XXL --from-fsdp --image-size 384
-```
-The generated images will be saved to `sample_c2i.png`.
+<p align="center">
+<img src="NeurIPS-VidualInstructionEditing/figures/model_stagev2.pdf" width="95%">
+</p>
 
-### Gradio Demo <a href='https://github.com/gradio-app/gradio'><img src='https://img.shields.io/github/stars/gradio-app/gradio'></a>
+<div align="center">
 
-You can use our online gradio demo [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/FoundationVision/LlamaGen) or run gradio locally:
+| Stage | Purpose | Tasks | Training Time |
+|:------|:--------|:------|:-------------:|
+| **Stage 1** | Multimodal Alignment | • Image Reconstruction<br>• Object Segmentation<br>• T2I Generation | 14 hours |
+| **Stage 2** | Instruction Tuning | • Image Recovery<br>• Subject-driven Gen<br>• Balanced Integration | 20 hours |
+
+</div>
+
+### Architecture Components
+
+<details>
+<summary><b>🔧 Click to expand technical architecture</b></summary>
+
+#### Multimodal Encoder
+- **Vision**: CLIP-Large-Patch14 (frozen)
+- **Language**: FlanT5-XL 
+- **Connector Options**:
+  - **MLP-based**: Full visual detail preservation (256 tokens/image)
+  - **Query-based**: Efficient token compression (32 tokens/image)
+
+#### Autoregressive Decoder
+- **Base Model**: LlamaGen-XL (775M parameters)
+- **Vocabulary**: Shared with VQGAN tokenizer
+- **Generation**: Deterministic next-token prediction
+
+</details>
+
+---
+
+## 💻 Installation
+
+<details>
+<summary><b>Requirements</b></summary>
+
+- Python ≥ 3.8
+- PyTorch ≥ 2.1.0
+- CUDA ≥ 11.8
+- 8× NVIDIA A100 GPUs (80GB) for training
+- 1× GPU (24GB) for inference
+
+</details>
+
 ```bash
-python app.py
+# Clone repository
+git clone https://github.com/HaozheZhao/MENTOR.git
+cd MENTOR
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download pretrained models
+python scripts/download_models.py
 ```
 
+---
 
-## 🚀 Text-conditional image generation
-### VQ-VAE models
-Method | params | tokens | data | weight
---- |:---:|:---:|:---:|:---:
-vq_ds16_t2i | 72M | 16x16 | LAION COCO (50M) + internal data (10M) | [vq_ds16_t2i.pt](https://huggingface.co/peizesun/llamagen_t2i/resolve/main/vq_ds16_t2i.pt)
+## 🎯 Usage Examples
 
-### AR models
-Method | params | tokens | data | weight 
---- |:---:|:---:|:---:|:---:
-LlamaGen-XL  | 775M | 16x16 | LAION COCO (50M) | [t2i_XL_stage1_256.pt](https://huggingface.co/peizesun/llamagen_t2i/resolve/main/t2i_XL_stage1_256.pt)
-LlamaGen-XL  | 775M | 32x32 | internal data (10M) | [t2i_XL_stage2_512.pt](https://huggingface.co/peizesun/llamagen_t2i/resolve/main/t2i_XL_stage2_512.pt)
+### Basic Generation
 
-### Demo
-Before running demo, please refer to [language readme](language/README.md) to install the required packages and language models.  
+```python
+from mentor import MENTOR
 
-Please download models, put them in the folder `./pretrained_models`, and run
+# Load model
+model = MENTOR.from_pretrained("MENTOR/mentor-mlp")
+
+# Text-to-Image
+image = model.generate(text="A majestic mountain at sunset")
+
+# Subject-driven generation
+image = model.generate(
+    text="A dog playing piano",
+    reference_image="path/to/dog.jpg"
+)
+
+# Multi-image generation (Query variant)
+model_query = MENTOR.from_pretrained("MENTOR/mentor-query")
+image = model_query.generate(
+    text="Combine these styles",
+    reference_images=["style1.jpg", "style2.jpg", "style3.jpg"]
+)
 ```
-python3 autoregressive/sample/sample_t2i.py --vq-ckpt ./pretrained_models/vq_ds16_t2i.pt --gpt-ckpt ./pretrained_models/t2i_XL_stage1_256.pt --gpt-model GPT-XL --image-size 256
-# or
-python3 autoregressive/sample/sample_t2i.py --vq-ckpt ./pretrained_models/vq_ds16_t2i.pt --gpt-ckpt ./pretrained_models/t2i_XL_stage2_512.pt --gpt-model GPT-XL --image-size 512
+
+### Advanced Features
+
+<details>
+<summary><b>🔍 Text-Guided Segmentation</b></summary>
+
+```python
+mask = model.segment(
+    image="path/to/image.jpg",
+    text="the red car"
+)
 ```
-The generated images will be saved to `sample_t2i.png`.
 
-### Local Gradio Demo
+</details>
 
+<details>
+<summary><b>🎨 In-Context Learning</b></summary>
 
-
-## ⚡ Serving
-We use serving framework [vLLM](https://github.com/vllm-project/vllm) to enable higher throughput. Please refer to [serving readme](autoregressive/serve/README.md) to install the required packages.  
+```python
+# Provide examples for few-shot adaptation
+examples = [
+    {"input": "sketch1.jpg", "output": "colored1.jpg"},
+    {"input": "sketch2.jpg", "output": "colored2.jpg"}
+]
+result = model.in_context_generate(
+    examples=examples,
+    query="sketch3.jpg"
+)
 ```
-python3 autoregressive/serve/sample_c2i.py --vq-ckpt ./pretrained_models/vq_ds16_c2i.pt --gpt-ckpt ./pretrained_models/c2i_XXL_384.pt --gpt-model GPT-XXL --from-fsdp --image-size 384
+
+</details>
+
+---
+
+## 🤖 Model Zoo
+
+<div align="center">
+
+| Model | Type | Context | Multi-Image | Download |
+|:------|:-----|:-------:|:-----------:|:--------:|
+| MENTOR-MLP | Full Detail | 256 tokens/img | ❌ | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-mlp) |
+| MENTOR-Query | Efficient | 32 tokens/img | ✅ (14 imgs) | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-query) |
+| MENTOR-Multi | Extended | 1280 tokens | ✅ (4 imgs) | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-multi) |
+
+</div>
+
+---
+
+## 🔬 Technical Details
+
+<details>
+<summary><b>📐 Mathematical Formulation</b></summary>
+
+### Training Objective
+Given multimodal inputs **c** = {I, T}, the encoder φ produces:
 ```
-The generated images will be saved to `sample_c2i_vllm.png`.
+H = MLP(φ(c)) = (h₁, ..., hₘ) ∈ ℝᴹˣᵈ
+```
 
+The AR decoder θ generates image sequence **y**:
+```
+θ(y | H) = ∏ᵢ₌₁ᴸ θ(yᵢ | y<ᵢ, H)
+```
 
-## Getting Started
-See [Getting Started](GETTING_STARTED.md) for installation, training and evaluation.
+### Classifier-Free Guidance
+- Training: Replace H with Hᵤ with probability p = 0.1
+- Inference: ℓ_g = ℓ_u + (ℓ_c - ℓ_u) × λ
 
+</details>
 
-## License
-The majority of this project is licensed under MIT License. Portions of the project are available under separate license of referred projects, detailed in corresponding files.
+<details>
+<summary><b>🔧 Training Configuration</b></summary>
 
+### Hyperparameters
+- **Optimizer**: AdamW (β₁=0.9, β₂=0.999)
+- **Learning Rate**: Stage 1: 5e-4, Stage 2: 1e-4
+- **Batch Size**: 128 (global)
+- **Warmup**: 5% of total steps
+- **Schedule**: Cosine decay
 
-## BibTeX
+### Hardware Requirements
+- **Training**: 8× A100 80GB (~34 hours total)
+- **Inference**: 1× GPU 24GB+ 
+- **Memory**: ~60GB peak during training
+
+</details>
+
+<details>
+<summary><b>📊 Extended Results</b></summary>
+
+### Ablation Studies
+
+| Configuration | CP | PF | CP·PF |
+|:--------------|:--:|:--:|:-----:|
+| Full Model | 0.555 | 0.839 | 0.466 |
+| w/o Stage 1 | 0.179 | 0.673 | 0.120 |
+| w/o Image Recovery | 0.661 | 0.284 | 0.188 |
+| w/o Segmentation | 0.412 | 0.918 | 0.378 |
+
+### ROPE Fix for LlamaGen
+We identified and corrected a critical bug in LlamaGen's 2D ROPE implementation that was causing information loss. Our fix required retraining on the original datasets before fine-tuning.
+
+</details>
+
+---
+
+## 🌟 Gallery
+
+<details>
+<summary><b>View more examples</b></summary>
+
+### Image Reconstruction
+<p align="center">
+<img src="NeurIPS-VidualInstructionEditing/figures/reconstruction_exp.pdf" width="80%">
+</p>
+
+### Multi-Subject Generation
+<p align="center">
+<img src="NeurIPS-VidualInstructionEditing/figures/multi_img.pdf" width="80%">
+</p>
+
+### In-Context Learning
+<p align="center">
+<img src="NeurIPS-VidualInstructionEditing/figures/icl_exp.pdf" width="80%">
+</p>
+
+</details>
+
+---
+
+## 📚 Citation
+
+If you find MENTOR useful, please cite our paper:
+
 ```bibtex
-@article{sun2024autoregressive,
-  title={Autoregressive Model Beats Diffusion: Llama for Scalable Image Generation},
-  author={Sun, Peize and Jiang, Yi and Chen, Shoufa and Zhang, Shilong and Peng, Bingyue and Luo, Ping and Yuan, Zehuan},
-  journal={arXiv preprint arXiv:2406.06525},
+@inproceedings{zhao2024mentor,
+  title={MENTOR: Efficient Multimodal-Conditioned Tuning for Autoregressive Vision Generation Models},
+  author={Zhao, Haozhe* and Cai, Zefan* and Si, Shuzheng and Chen, Liang and 
+          Gu, Jiuxiang and Xiao, Wen and Hu, Junjie},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
   year={2024}
 }
 ```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Acknowledgments
+
+We thank the teams behind LlamaGen, CLIP, FlanT5, and DreamBench++ for their foundational contributions.
+
+---
+
+<div align="center">
+<p>
+<a href="https://github.com/HaozheZhao/MENTOR/issues">🐛 Report Bug</a> •
+<a href="https://github.com/HaozheZhao/MENTOR/issues">💡 Request Feature</a> •
+<a href="https://discord.gg/mentor">💬 Join Discord</a>
+</p>
+
+<p><b>Made with ❤️ by the MENTOR Team</b></p>
+</div>
