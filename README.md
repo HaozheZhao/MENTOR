@@ -10,7 +10,7 @@
 <h3>🏆 State-of-the-Art Multimodal Image Generation with 10× Less Data</h3>
 
 <p align="center">
-  <img src="NeurIPS-VidualInstructionEditing/figures/teasarv3.pdf" width="90%" />
+  <img src="figures/teasarv3.png" width="90%" alt="MENTOR Overview" />
 </p>
 
 **[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[🎬 Video](https://youtube.com)** | **[💻 Code](#installation)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[📊 Results](#main-results)**
@@ -100,7 +100,7 @@ image = model.generate(
 ### 🏅 DreamBench++ Benchmark Leadership
 
 <p align="center">
-<img src="NeurIPS-VidualInstructionEditing/figures/Figure.pdf" width="60%">
+<img src="figures/Figure.png" width="60%" alt="Performance Comparison">
 </p>
 
 <div align="center">
@@ -134,7 +134,7 @@ image = model.generate(
 ### Two-Stage Training Paradigm
 
 <p align="center">
-<img src="NeurIPS-VidualInstructionEditing/figures/model_stagev2.pdf" width="95%">
+<img src="figures/model_stagev2.png" width="95%" alt="Model Architecture">
 </p>
 
 <div align="center">
@@ -333,17 +333,17 @@ We identified and corrected a critical bug in LlamaGen's 2D ROPE implementation 
 
 ### Image Reconstruction
 <p align="center">
-<img src="NeurIPS-VidualInstructionEditing/figures/reconstruction_exp.pdf" width="80%">
+<img src="figures/reconstruction_exp.png" width="80%" alt="Image Reconstruction Examples">
 </p>
 
 ### Multi-Subject Generation
 <p align="center">
-<img src="NeurIPS-VidualInstructionEditing/figures/multi_img.pdf" width="80%">
+<img src="figures/multi_img.png" width="80%" alt="Multi-Subject Generation">
 </p>
 
 ### In-Context Learning
 <p align="center">
-<img src="NeurIPS-VidualInstructionEditing/figures/icl_exp.pdf" width="80%">
+<img src="figures/icl_exp.png" width="80%" alt="In-Context Learning Examples">
 </p>
 
 </details>
