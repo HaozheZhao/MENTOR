@@ -134,7 +134,7 @@ image = model.generate(
 ### Two-Stage Training Paradigm
 
 <p align="center">
-<img src="figures/model_stagev2.png" width="80%" alt="Model Architecture">
+<img src="figures/model_stagev3.png" width="80%" alt="Model Architecture">
 </p>
 
 <div align="center">
