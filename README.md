@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![NeurIPS 2024](https://img.shields.io/badge/NeurIPS-2024-blue.svg?style=for-the-badge)](https://arxiv.org/abs/XXXX.XXXXX)
+[![arXiv](https://img.shields.io/badge/arXiv-1234.56789-B31B1B.svg?style=for-the-badge)](https://arxiv.org/abs/1234.56789)
 [![Project Page](https://img.shields.io/badge/Project-Page-green.svg?style=for-the-badge)](https://mentor.github.io)
 [![Hugging Face](https://img.shields.io/badge/🤗-Models-yellow.svg?style=for-the-badge)](https://huggingface.co/MENTOR)
 [![Demo](https://img.shields.io/badge/🎯-Demo-red.svg?style=for-the-badge)](https://huggingface.co/spaces/MENTOR/demo)
@@ -13,7 +13,7 @@
   <img src="figures/teasarv3.png" width="100%" alt="MENTOR Overview" />
 </p>
 
-**[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[🎬 Video](https://youtube.com)** | **[💻 Code](#installation)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[📊 Results](#main-results)**
+**[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[💻 Code](#installation)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[🤗 Dataset](https://huggingface.co/MENTOR)**
 
 </div>
 
@@ -359,7 +359,6 @@ If you find MENTOR useful, please cite our paper:
   title={MENTOR: Efficient Multimodal-Conditioned Tuning for Autoregressive Vision Generation Models},
   author={Zhao, Haozhe* and Cai, Zefan* and Si, Shuzheng and Chen, Liang and 
           Gu, Jiuxiang and Xiao, Wen and Hu, Junjie},
-  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
   year={2024}
 }
 ```
