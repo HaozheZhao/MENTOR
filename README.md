@@ -13,7 +13,7 @@
   <img src="figures/teasarv3.png" width="100%" alt="MENTOR Overview" />
 </p>
 
-**[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[💻 Code](#installation)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[🤗 Dataset](https://huggingface.co/MENTOR)**
+**[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[💻 Code](https://github.com/HaozheZhao/MENTOR)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[🤗 Stage1 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage1)**| | **[🤗 Stage2 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage2)**| 
 
 </div>
 
@@ -105,12 +105,13 @@ image = model.generate(
 
 <div align="center">
 
-| Method | Model Size | Training Data | CP↑ | PF↑ | **CP·PF↑** | CP/PF↓ |
+| Method | Model Size | Training Data | CP↑ | PF↑ | **CP·PF↑** | **CP/PF↓** |
 |:-------|:----------:|:-------------:|:---:|:---:|:----------:|:------:|
-| Emu2 | 37B | 16M | 0.53 | 0.69 | 0.36 | 0.77 |
 | DreamEngine | 10.5B | 21M | 0.68 | 0.37 | 0.26 | 1.84 |
 | Kosmos-G | 3B | 200M | 0.54 | 0.51 | 0.28 | 1.06 |
-| **MENTOR** | **2.3B** | **3M** | **0.55** | **0.84** | **0.47** | **0.65** |
+| Emu2 | 37B | 16M | 0.53 | 0.69 | 0.36 | 0.77 |
+| IP-Adapter ViT-G | 2.5B | 10M | 0.59 | 0.64 | 0.38 | 0.92 |
+| **MENTOR** | **2.3B** | **3M** | 0.55 | 0.84 | **0.47** | **0.65** |
 
 </div>
 
@@ -120,10 +121,14 @@ image = model.generate(
 
 <div align="center">
 
-| Method | COCO L2↓ | JourneyDB L2↓ | Improvement |
-|:-------|:--------:|:-------------:|:-----------:|
-| DreamEngine | 0.2065 | 0.2052 | Baseline |
-| **MENTOR** | **0.1008** | **0.0867** | **>50% Better** |
+| Method         | COCO L2↓ | JourneyDB L2↓ | Improvement      |
+|:---------------|:--------:|:-------------:|:----------------:|
+| SeedTokenizer  | 0.5102   | 0.5291        | \          |
+| SEED-X         | 0.4317   | 0.4352        | \          |
+| EMU2-Gen       | 0.3828   | 0.2869        | \           |
+| DreamEngine    | 0.2065   | 0.2052        | Baseline         |
+| **MENTOR**     | **0.1008** | **0.0867**  | **~50% Better** |
+
 
 </div>
 
