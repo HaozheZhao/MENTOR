@@ -91,6 +91,7 @@ cat stage2_data.tar.gz.part-* | pv | tar -xzf -
 ```
 
 ### train
+```bash
 # stage 1 training
 bash scripts/autoregressive/train_stage1.sh
 
@@ -99,7 +100,6 @@ bash scripts/autoregressive/train_stage2.sh
 
 # ablation training
 bash scripts/autoregressive/ablation.sh
-
 ```
 
 <div align="center">
