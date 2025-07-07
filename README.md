@@ -70,18 +70,36 @@
 </div>
 
 ## 🚀 Quick Start
-
+### Install
 ```bash
-# Install MENTOR
-pip install mentor-gen
+conda env create --file environment.yml
+```
+### Download dataset and model
+```bash
+# download ckpts:
+huggingface-cli download BleachNick/Mentor --local-dir Mentor
 
-# Generate with one line of code
-from mentor import MENTOR
-model = MENTOR.from_pretrained("MENTOR/mentor-mlp")
-image = model.generate(
-    text="A corgi wearing sunglasses on the beach",
-    reference_image="path/to/corgi.jpg"
-)
+# download stage-1 dataset:
+
+huggingface-cli download BleachNick/Mentor_Stage1 --repo-type dataset --local-dir Mentor_Stage1
+cd Mentor_Stage1
+cat stage1_data.tar.gz.part-* | pv | tar -xzf -
+cd ..
+huggingface-cli download BleachNick/Mentor_Stage2 --repo-type dataset --local-dir Mentor_Stage2
+cd Mentor_Stage2
+cat stage2_data.tar.gz.part-* | pv | tar -xzf -
+```
+
+### train
+# stage 1 training
+bash scripts/autoregressive/train_stage1.sh
+
+# stage 2 training
+bash scripts/autoregressive/train_stage2.sh
+
+# ablation training
+bash scripts/autoregressive/ablation.sh
+
 ```
 
 <div align="center">
@@ -203,29 +221,17 @@ python scripts/download_models.py
 
 ### Basic Generation
 
-```python
-from mentor import MENTOR
-
-# Load model
-model = MENTOR.from_pretrained("MENTOR/mentor-mlp")
-
-# Text-to-Image
-image = model.generate(text="A majestic mountain at sunset")
-
-# Subject-driven generation
-image = model.generate(
-    text="A dog playing piano",
-    reference_image="path/to/dog.jpg"
-)
-
-# Multi-image generation (Query variant)
-model_query = MENTOR.from_pretrained("MENTOR/mentor-query")
-image = model_query.generate(
-    text="Combine these styles",
-    reference_images=["style1.jpg", "style2.jpg", "style3.jpg"]
-)
 ```
-
+  python demo.py \
+      --image_path cat.jpg \
+      --prompt "A cat in <image>.\n A cat in a 16-bit fantasy pixel-art scene" \
+      --gpt_ckpt Mentor/stage2.pt \
+      --vq_ckpt  Mentor/vq_ds16_t2i.pt \
+      --output out/cat_pixel.jpg \
+      --mm_vision_tower "openai/clip-vit-large-patch14" \
+      --multimodal_encoder llava \
+```
+<!-- 
 ### Advanced Features
 
 <details>
@@ -255,12 +261,12 @@ result = model.in_context_generate(
 )
 ```
 
-</details>
+</details> -->
 
 ---
 
-## 🤖 Model Zoo
-
+<!-- ## 🤖 Model Zoo -->
+<!-- 
 <div align="center">
 
 | Model | Type | Context | Multi-Image | Download |
@@ -271,7 +277,7 @@ result = model.in_context_generate(
 
 </div>
 
----
+--- -->
 
 ## 🔬 Technical Details
 
