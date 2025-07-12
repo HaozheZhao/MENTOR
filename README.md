@@ -58,13 +58,13 @@
 
 <div align="center">
 
-| Feature | MENTOR | Diffusion Models |
+| Feature | MENTOR | Diffusion-Based Models |
 |---------|--------|------------------|
 | **Training Efficiency** | ✅ 1.5 days on 8 GPUs | ❌ 3+ days on 256 GPUs |
 | **Deterministic Control** | ✅ Precise AR generation | ❌ Stochastic sampling |
 | **Modality Balance** | ✅ Lowest CP/PF ratio (0.65) | ❌ High imbalance (>1.0) |
 | **Architecture** | ✅ Simple unified transformer | ❌ Complex auxiliary modules |
-| **Multi-task Support** | ✅ Zero-shot adaptation | ❌ Task-specific tuning |
+<!-- | **Multi-task Support** | ✅ Zero-shot adaptation | ❌ Task-specific tuning | -->
 
 </div>
 
@@ -310,7 +310,6 @@ The AR decoder θ generates image sequence **y**:
 ### Hardware Requirements
 - **Training**: 8× A100 80GB (~34 hours total)
 - **Inference**: 1× GPU 24GB+ 
-- **Memory**: ~60GB peak during training
 
 </details>
 
@@ -326,8 +325,10 @@ The AR decoder θ generates image sequence **y**:
 | w/o Image Recovery | 0.661 | 0.284 | 0.188 |
 | w/o Segmentation | 0.412 | 0.918 | 0.378 |
 
-### ROPE Fix for LlamaGen
-We identified and corrected a critical bug in LlamaGen's 2D ROPE implementation that was causing information loss. Our fix required retraining on the original datasets before fine-tuning.
+### 🛠️ ROPE Fix for LlamaGen [#54](https://github.com/FoundationVision/LlamaGen/issues/54)
+
+We identified and resolved a critical bug in [LlamaGen](https://github.com/FoundationVision/LlamaGen)'s 2D ROPE implementation that was causing significant information loss. Our fix required retraining the [model](https://huggingface.co/BleachNick/Mentor/blob/main/generator_ckpt.pt) prior to fine-tuning.
+
 
 </details>
 
@@ -371,21 +372,21 @@ If you find MENTOR useful, please cite our paper:
 ```
 
 ---
-
+<!-- 
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details. -->
 
 ## 🙏 Acknowledgments
 
-We thank the teams behind LlamaGen, CLIP, FlanT5, and DreamBench++ for their foundational contributions.
+We thank the teams behind [LlamaGen]{https://github.com/FoundationVision/LlamaGen}, and [DreamBench++]{https://github.com/yuangpeng/dreambench_plus} for their foundational contributions.
 
 ---
-
+<!-- 
 <div align="center">
 <p>
 <a href="https://github.com/HaozheZhao/MENTOR/issues">🐛 Report Bug</a> •
@@ -394,4 +395,4 @@ We thank the teams behind LlamaGen, CLIP, FlanT5, and DreamBench++ for their fou
 </p>
 
 <p><b>Made with ❤️ by the MENTOR Team</b></p>
-</div>
+</div> -->

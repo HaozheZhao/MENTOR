@@ -31,7 +31,7 @@ autoregressive/train/train_t2i.py \
 --dataset ti2i \
 --image-size 512 \
 --results-dir ${experiment_name} \
---cloud-save-path ~/MENTOR/checkpoints \
+--cloud-save-path checkpoint \
 --lr ${lr} \
 --val_data_path ${val_data_path} \
 --use_vision_tower \
