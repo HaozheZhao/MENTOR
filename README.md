@@ -3,7 +3,7 @@
 <div align="center">
 
 [![arXiv](https://img.shields.io/badge/arXiv-1234.56789-B31B1B.svg?style=for-the-badge)](https://arxiv.org/abs/1234.56789)
-[![Project Page](https://img.shields.io/badge/Project-Page-green.svg?style=for-the-badge)](https://mentor.github.io)
+[![Project Page](https://img.shields.io/badge/Project-Page-green.svg?style=for-the-badge)](https://haozhezhao.github.io/MENTOR.page)
 [![Hugging Face](https://img.shields.io/badge/🤗-Models-yellow.svg?style=for-the-badge)](https://huggingface.co/MENTOR)
 <!-- [![Demo](https://img.shields.io/badge/🎯-Demo-red.svg?style=for-the-badge)](https://huggingface.co/spaces/MENTOR/demo) -->
 
@@ -257,19 +257,19 @@ result = model.in_context_generate(
 )
 ```
 
-</details> -->
-
----
-
-<!-- ## 🤖 Model Zoo -->
+</details> --> 
+<!-- --- -->
 <!-- 
+## 🤖 Model Zoo
+
 <div align="center">
 
 | Model | Type | Context | Multi-Image | Download |
 |:------|:-----|:-------:|:-----------:|:--------:|
-| MENTOR-MLP | Full Detail | 256 tokens/img | ❌ | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-mlp) |
-| MENTOR-Query | Efficient | 32 tokens/img | ✅ (14 imgs) | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-query) |
-| MENTOR-Multi | Extended | 1280 tokens | ✅ (4 imgs) | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-multi) |
+| MENTOR-MLP connector | Extended | 1280 tokens | ✅ (4 imgs) | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-multi) |
+| T2I-Generator | Full Detail | 256 tokens/img | ❌ | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-mlp) |
+| MENTOR-Stage1 | Full Detail | 256 tokens/img | ❌ | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-mlp) |
+| MENTOR-Stage2 | Efficient | 32 tokens/img | ✅ (14 imgs) | [🤗 HF Hub](https://huggingface.co/MENTOR/mentor-query) |
 
 </div>
 
