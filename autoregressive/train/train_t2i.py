@@ -1,22 +1,12 @@
 # Modified from:
-#   fast-DiT: https://github.com/chuanyangjin/fast-DiT
-#   nanoGPT: https://github.com/karpathy/nanoGPT
+#   LlamaGen: https://github.com/FoundationVision/LlamaGen
 
-# import debugpy
-#
-# # Listen for a debugger client to attach
-# debugpy.listen(("0.0.0.0", 5678))
-#
-# # Wait for the client to attach to the debugger before proceeding
-# print("Waiting for debugger attach...")
-# debugpy.wait_for_client()
 import torch._dynamo
 torch._dynamo.config.suppress_errors = True
 from textwrap import fill
 import torch
 import socket
 import wandb
-# torch._dynamo.config.capture_scalar_outputs = True
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 from tqdm import tqdm
@@ -104,19 +94,6 @@ def main(args):
     print(f"Using visual encoder type: {args.multimodal_encoder}")
     # Setup DDP:
     init_distributed_mode(args)
-    # import debugpy
-    # # 根据分布式进程的 rank 动态分配调试端口
-    # if "RANK" in os.environ:
-    #     rank = int(os.environ["RANK"])
-    #     debug_port = 12345 # 每个进程分配不同的端口
-    #     debugpy.listen(("0.0.0.0", debug_port))
-    #     print(f"Rank {rank} is waiting for debugger to attach at port {debug_port}...")
-    #     debugpy.wait_for_client()
-
-    # # 确保在调试器附加后继续执行
-    # if "RANK" not in os.environ or dist.get_rank() == 0:
-    #     print("Debugpy initialized, continuing execution...")
-
     assert args.global_batch_size % dist.get_world_size() == 0, f"Batch size must be divisible by world size."
     rank = dist.get_rank()
     device = rank % torch.cuda.device_count()
@@ -137,13 +114,6 @@ def main(args):
         os.makedirs(checkpoint_dir, exist_ok=True)
         logger = create_logger(experiment_dir)
         logger.info(f"Experiment directory created at {experiment_dir}")
-
-        # time_record = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-        # cloud_results_dir = f"{args.cloud_save_path}/{time_record}"
-        # cloud_checkpoint_dir = f"{cloud_results_dir}/{experiment_index:03d}-{model_string_name}/checkpoints"
-        # os.makedirs(cloud_checkpoint_dir, exist_ok=True)
-        # logger.info(f"Experiment directory created in cloud at {cloud_checkpoint_dir}")
-    
     else:
         logger = create_logger(None)
 
@@ -202,21 +172,18 @@ def main(args):
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
     def pad_input_ids(text_input_ids, padding_value=0):
-        # 找到所有 tensor 的最大行数和最大列数
         max_n = max(t.shape[0] for t in text_input_ids)
         max_m = max(t.shape[1] for t in text_input_ids)
         
         padded_list = []
         for t in text_input_ids:
             n, m = t.shape
-            pad_n = max_n - n   # 行方向需要补的数量
-            pad_m = max_m - m   # 列方向需要补的数量
+            pad_n = max_n - n  
+            pad_m = max_m - m   
             
-            # 对于二维 tensor，F.pad 的 padding 参数格式为：(左边, 右边, 上面, 下面)
             padded_t = F.pad(t, (0, pad_m, 0, pad_n), "constant", padding_value)
             padded_list.append(padded_t)
         
-        # Stack 成一个 shape 为 (batch, max_n, max_m) 的 tensor
         return torch.stack(padded_list)
 
     def custom_collate_fn(batch):  
@@ -262,15 +229,9 @@ def main(args):
                 num_of_images = pv.shape[1]
                 # Calculate padding required  
                 padding_needed = max_num_of_images - num_of_images  
-                # Pad the tensor to the desired size  
-                # Padding size format: (lastdim_pad_before, lastdim_pad_after, ..., firstdim_pad_before, firstdim_pad_after)  
-                # padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0, 0, padding_needed), "constant", 0)
                 padded_pv = torch.nn.functional.pad(pv, (0, 0, 0, 0, 0, 0, 0, padding_needed), "constant", 0)
                 padded_pixel_values.append(padded_pv)  
-            
-            # Stack all padded pixel_values into a single tensor
-            # for each in padded_pixel_values:
-            #     logger.info("each shape: {}".format(each.shape))
+
             pixel_values = torch.concat(padded_pixel_values)  
         
         cond_idxs_padded = pad_sequence(cond_idxs, batch_first=True, padding_value=0)  
@@ -294,22 +255,7 @@ def main(args):
             else:
                 text_input_ids_padded = pad_input_ids(text_input_ids, padding_value=0)
                 text_attention_mask_padded = pad_input_ids(text_attention_mask, padding_value=0)
-            
-        # print(f"images shape: {images.shape}")
-        # print(f"pixel_values shape: {pixel_values.shape}")
-        # print(f"cond_idxs_padded shape: {cond_idxs_padded.shape}")
-        # print(f"attention_masks_padded shape: {attention_masks_padded.shape}")
-        # print(f"padded_image_masks shape: {padded_image_masks.shape}")
-        # print(f"valids shape: {valids.shape}")
-        # print(f"text_input_ids_padded shape: {text_input_ids_padded.shape}")
-        # print(f"text_attention_mask_padded shape: {text_attention_mask_padded.shape}")
-        # print("+==========================")
-
-        # if expected_length == 9:
-        #     return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks, img_pixel, valids, text_input_ids_padded, text_attention_mask_padded
-        # elif expected_length == 10:
-        #     return images, pixel_values, cond_idxs_padded, attention_masks_padded, padded_image_masks,img_pixel, valids, pixel_source, text_input_ids_padded, text_attention_mask_padded
-        
+   
         valids_bool = valids.bool()
 
         if valids_bool.sum() > 0:
@@ -343,7 +289,7 @@ def main(args):
 
 
     if args.use_vision_tower:
-        dataset = build_dataset(args, transform=transform, data_path = args.data_path, processor = model.multimodal_processor,with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
+        dataset = build_dataset(args, transform=transform, data_path = args.data_path, processor = model.multimodal_processor,with_image_only=args.with_image_only, image_only_rate = args.image_only_rate)
     else:
         dataset = build_dataset(args, transform=transform)
 
@@ -398,7 +344,7 @@ def main(args):
 
 
     if args.do_eval:
-        val_dataset = build_dataset(args, transform=transform, data_path = args.val_data_path, processor = model.multimodal_processor, max_samples = args.max_eval_samples,is_val = True,dreambench_eval=args.dreambench_eval, with_image_only=args.with_image_only, image_only_rate = args.image_only_rate, stage2 = args.stage2 )
+        val_dataset = build_dataset(args, transform=transform, data_path = args.val_data_path, processor = model.multimodal_processor, max_samples = args.max_eval_samples,is_val = True,dreambench_eval=args.dreambench_eval, with_image_only=args.with_image_only, image_only_rate = args.image_only_rate)
         val_sampler = DistributedSampler(
             val_dataset,
             num_replicas=dist.get_world_size(),
@@ -432,24 +378,23 @@ def main(args):
             result_llama = model.load_state_dict(checkpoint, strict=strict)
             model.cls_embedding.uncond_embedding.data[:120] = uncond_embedding_weight
         else:
-            if not args.stage2:
-                result = load_sharded_checkpoint(model.multimodal_encoder,args.model_name_or_path,strict=False)
-                print(f'load multimodal_encoder from pretrained CKPT: {args.model_name_or_path}  Result: ',result)
-                if args.subject_driven:
-                    if args.multimodal_encoder == 'blip':
-                        subject_embedding_ckpt = torch.load(args.load_subject_embedding, map_location="cpu")
-                        model.multimodal_encoder.qformer.embeddings.load_state_dict(subject_embedding_ckpt, strict=True) 
-                        del subject_embedding_ckpt
+            result = load_sharded_checkpoint(model.multimodal_encoder,args.model_name_or_path,strict=False)
+            print(f'load multimodal_encoder from pretrained CKPT: {args.model_name_or_path}  Result: ',result)
+            if args.subject_driven:
+                if args.multimodal_encoder == 'blip':
+                    subject_embedding_ckpt = torch.load(args.load_subject_embedding, map_location="cpu")
+                    model.multimodal_encoder.qformer.embeddings.load_state_dict(subject_embedding_ckpt, strict=True) 
+                    del subject_embedding_ckpt
 
-                if args.multimodal_encoder == 'llava':
-                    model.multimodal_encoder.vision_model.load_model()
-                    temp_ckpt = torch.load(args.load_language_projection, map_location="cpu")
-                    language_projection_ckpt = {
-                      k[len("model.mm_projector."):]: v  for k,v in temp_ckpt.items()
-                    }
-                    model.multimodal_encoder.language_projection.load_state_dict(language_projection_ckpt, strict=True) 
-                    del language_projection_ckpt, temp_ckpt
-                strict = False
+            if args.multimodal_encoder == 'llava':
+                model.multimodal_encoder.vision_model.load_model()
+                temp_ckpt = torch.load(args.load_language_projection, map_location="cpu")
+                language_projection_ckpt = {
+                    k[len("model.mm_projector."):]: v  for k,v in temp_ckpt.items()
+                }
+                model.multimodal_encoder.language_projection.load_state_dict(language_projection_ckpt, strict=True) 
+                del language_projection_ckpt, temp_ckpt
+            strict = False
             checkpoint = torch.load(args.load_from_checkpoint, map_location="cpu")
             if args.cls_token_num != 120 and not args.load_fixed_llamagen:
                 strict = False
@@ -557,7 +502,7 @@ def main(args):
                     para.requires_grad = True
                 for para in model.multimodal_encoder.vision_model.parameters():
                     para.requires_grad = False
-                if args.subject_driven and not args.stage2 and not args.do_recovery: # freeze rest
+                if args.subject_driven and not args.do_recovery: # freeze rest
 
                     if "llava" not in args.multimodal_encoder:
                         for para in model.multimodal_encoder.qformer.parameters():
@@ -584,17 +529,6 @@ def main(args):
                             para.requires_grad = False
                         for para in model.output.parameters():
                             para.requires_grad = False
-            # if args.do_recovery:
-
-            # elif args.subject_driven and args.do_recovery: 
-            #     for para in model.multimodal_encoder.language_model.parameters():
-            #         para.requires_grad = True
-            #     for keys, param in model.named_parameters(): 
-            #         if "multimodal_encoder" not in keys:
-            #             param.requires_grad = True
-            # else:
-            #     for para in model.multimodal_encoder.language_model.parameters():
-            #         para.requires_grad = True
     if args.continue_stage1 and args.use_vision_tower:
         logger.info(f"Continue Stage1, only generator is trainable")
         for para in model.parameters():
@@ -710,19 +644,6 @@ def main(args):
 
                 # Step the learning rate scheduler
                 lr_scheduler.step()
-
-            # if args.max_grad_norm != 0.0:
-            #     scaler.unscale_(optimizer)
-            #     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-            # # step the optimizer and scaler if training in fp16
-            # scaler.step(optimizer)
-            # scaler.update()
-            # # flush the gradients as soon as we can, no need for this memory anymore
-            # lr_scheduler.step()
-
-            # optimizer.zero_grad(set_to_none=True)
-
-            # Log loss values:
             running_loss += loss.item() * gradient_accumulation_steps 
             log_steps += 1
             train_steps += 1
@@ -815,9 +736,6 @@ def main(args):
                                 text_attention_mask = text_attention_mask
                             )
                             emb_masks = eval_cond_attn_mask
-                            # if args.stage2:
-                            #     caption_embs = caption_embs[:, :args.cls_token_num, :]
-                            #     emb_masks = emb_masks[:, :args.cls_token_num]
                             if not args.no_left_padding:
                                 print(f"processing left-padding...")
                                 # a naive way to implement left-padding
@@ -857,10 +775,7 @@ def main(args):
                             try:
                                 
                                 if eval_pixel_values is not None:
-                                    if not args.stage2:
-                                        p_values = eval_pixel_values[:,0] if len(eval_pixel_values.shape) == 5  else eval_pixel_values
-                                    else:
-                                        p_values = pixual_value_source[:,0] if len(pixual_value_source.shape) == 5  else pixual_value_source
+                                    p_values = eval_pixel_values[:,0] if len(eval_pixel_values.shape) == 5  else eval_pixel_values
                                     pixel_values_img_list = postprocess(p_values, mean=eval_model.multimodal_processor.image_processor.image_mean,
                                                                 std=eval_model.multimodal_processor.image_processor.image_std)
                                     transformed_images = [transform(img.resize(
@@ -934,16 +849,8 @@ def main(args):
 
                                 images_to_save = torch.cat((text_images_tensors.to("cpu"),img_denormalized.to("cpu"), img_samples.to("cpu")), dim=0) # input text, input images, generated images, ground truth images
 
-                                # save_image(img_denormalized, ori_save_path, nrow=img_denormalized.shape[0])
-
                                 save_image(images_to_save, sample_save_path, nrow=img_samples.shape[0], normalize=True)
-                        # wandb.log(
-                        #     {"eval_samples": wandb.Image(upload_path) },
-                        #     step=train_steps,
-                        # )
 
-                        # dist.barrier()
-                        # model.train()
                     del eval_model
                     import gc
                     gc.collect()
@@ -969,26 +876,18 @@ def main(args):
                         torch.save(checkpoint, checkpoint_path)
                         logger.info(f"Saved checkpoint to {checkpoint_path}")
                     
-                        # 仅当设置了保存数量限制时才进行删除操作
                         if args.save_total_limit > 0:
-                            # 获取 checkpoint 目录下所有 .pt 文件
                             checkpoint_files = glob(os.path.join(checkpoint_dir, "*.pt"))
-                            # 按照文件名中的数字（训练步数）排序，假设文件名格式为 "0000001.pt"
                             checkpoint_files.sort(key=lambda x: int(os.path.basename(x).split('.')[0]))
                             
-                            # 如果文件数超过限制，则删除最旧的文件
                             while len(checkpoint_files) > args.save_total_limit:
                                 oldest_checkpoint = checkpoint_files.pop(0)
                                 os.remove(oldest_checkpoint)
                                 logger.info(f"Removed old checkpoint: {oldest_checkpoint}")
-                    # cloud_checkpoint_path = f"{cloud_checkpoint_dir}/{train_steps:07d}.pt"
-                    # torch.save(checkpoint, cloud_checkpoint_path)
-                    # logger.info(f"Saved checkpoint in cloud to {cloud_checkpoint_path}")
                 dist.barrier()
             
 
     model.eval()  # important! This disables randomized embedding dropout
-    # do any sampling/FID calculation/etc. with ema (or model) in eval mode ...
 
     logger.info("Done!")
     dist.destroy_process_group()
@@ -996,20 +895,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    # import debugpy
-
-    # # 监听指定的地址和端口（可以是本机或远程服务器）
-    # debugpy.listen(("0.0.0.0", 11223))
-
-    # print("等待调试器连接...")
-    # debugpy.wait_for_client()  # 让程序在这里暂停，直到 VS Code 连接调试
-
-    # print("调试器已连接，开始执行代码！")
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, required=True)
-    # parser.add_argument("--t5-feat-path", type=str, required=True)
-    # parser.add_argument("--short-t5-feat-path", type=str, default=None, help="short caption of t5_feat_path")
     parser.add_argument("--cloud-save-path", type=str, required=True, help='please specify a cloud disk path, if not, local path')
     parser.add_argument("--no-local-save", action='store_true', help='no save checkpoints to local path for limited disk volume')
     parser.add_argument("--vq-model", type=str, choices=list(VQ_models.keys()), default="VQ-16")
@@ -1088,8 +976,6 @@ if __name__ == "__main__":
 
     parser.add_argument("--image_only_rate", type=float, default=0.1, help="image_only_rate")
 
-    parser.add_argument("--stage2", action='store_true')
-
     # subject driven
     parser.add_argument("--subject_driven", action='store_true')
 
@@ -1129,11 +1015,6 @@ if __name__ == "__main__":
     parser.add_argument("--unfreeze_output", action='store_true', default=False)
 
     parser.add_argument("--fix", type=str, choices=["gpt","gpt-zero-fix", "gpt-empty-fix"], default="gpt")
-
-    # local_rank = int(os.environ.get("LOCAL_RANK", 0))
-
-
-
 
     args = parser.parse_args()
     main(args)

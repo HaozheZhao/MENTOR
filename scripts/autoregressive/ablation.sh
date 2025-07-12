@@ -56,7 +56,7 @@ for i in ${!experiment_names[@]}; do
   --cfg-scale 7.5 \
   --top-k 16384 \
   --load_from_checkpoint ${load_from_checkpoint} \
-  --global-batch-size 56 \
+  --global-batch-size 64 \
   --num-workers ${num_workers} \
   --warmup 0.05 \
   --gradient-accumulation-steps 4 \

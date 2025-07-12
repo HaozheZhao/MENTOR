@@ -5,9 +5,9 @@
 [![arXiv](https://img.shields.io/badge/arXiv-1234.56789-B31B1B.svg?style=for-the-badge)](https://arxiv.org/abs/1234.56789)
 [![Project Page](https://img.shields.io/badge/Project-Page-green.svg?style=for-the-badge)](https://mentor.github.io)
 [![Hugging Face](https://img.shields.io/badge/🤗-Models-yellow.svg?style=for-the-badge)](https://huggingface.co/MENTOR)
-[![Demo](https://img.shields.io/badge/🎯-Demo-red.svg?style=for-the-badge)](https://huggingface.co/spaces/MENTOR/demo)
+<!-- [![Demo](https://img.shields.io/badge/🎯-Demo-red.svg?style=for-the-badge)](https://huggingface.co/spaces/MENTOR/demo) -->
 
-<h3>🏆 State-of-the-Art Multimodal Image Generation with 10× Less Data</h3>
+<h3>🏆 Efficient Autoregressive Multimodal Image Generation with 10× Less Data</h3>
 
 <p align="center">
   <img src="figures/teasarv3.png" width="100%" alt="MENTOR Overview" />
@@ -25,18 +25,18 @@
 <table>
 <tr>
 <th>🔥 10× Less Training Data</th>
-<th>⚡ 170× Faster Training</th>
+<th>⚡ Faster Training</th>
 <th>💪 Better Performance</th>
 </tr>
 <tr>
 <td align="center">3M vs 16-200M samples</td>
-<td align="center">1.5 days vs 256 GPU-days</td>
-<td align="center">47% vs 36% CP·PF score</td>
+<td align="center">1.5 days in 8*A100 GPU</td>
+<td align="center">0.47 CP·PF score</td>
 </tr>
 </table>
 </div>
 
-**MENTOR** revolutionizes multimodal image generation by achieving superior results with dramatically reduced resources. While competitors like Emu2 require 37B parameters and massive datasets, MENTOR delivers better performance with just 2.3B parameters.
+**MENTOR** demonstrates competitive multimodal image generation capabilities, achieving superior results with dramatically reduced resources thanks to an efficient tuning paradigm. While competitors like Emu2 require 37 billion parameters and vast datasets, MENTOR surpasses their performance with only 2.3 billion parameters and significantly less training data in an autoregressive vision generation framework.
 
 <details>
 <summary><b>📋 Table of Contents</b></summary>
@@ -45,9 +45,8 @@
 - [Quick Start](#-quick-start)
 - [Main Results](#-main-results)
 - [Method Overview](#-method-overview)
-- [Installation](#-installation)
 - [Usage Examples](#-usage-examples)
-- [Model Zoo](#-model-zoo)
+<!-- - [Model Zoo](#-model-zoo) -->
 - [Technical Details](#-technical-details)
 - [Citation](#-citation)
 
@@ -70,46 +69,69 @@
 </div>
 
 ## 🚀 Quick Start
-### Install
+
+### 💻 Installation
+
+
+<details>
+<summary><b>Requirements</b></summary>
+
+- Python ≥ 3.11
+- PyTorch ≥ 2.5.1
+- CUDA ≥ 12.1
+- 8× NVIDIA A100 GPUs (80GB) for training
+
+</details>
+
 ```bash
+# Clone repository
+git clone https://github.com/HaozheZhao/MENTOR.git
+cd MENTOR
+
+# Install dependencies
 conda env create --file environment.yml
+
 ```
-### Download dataset and model
+
+### 📥 Download Dataset and Model
 ```bash
-# download ckpts:
+# Download model checkpoints
 huggingface-cli download BleachNick/Mentor --local-dir Mentor
 
-# download stage-1 dataset:
-
+# Download Stage-1 dataset
 huggingface-cli download BleachNick/Mentor_Stage1 --repo-type dataset --local-dir Mentor_Stage1
 cd Mentor_Stage1
 cat stage1_data.tar.gz.part-* | pv | tar -xzf -
 cd ..
+
+# Download Stage-2 dataset
 huggingface-cli download BleachNick/Mentor_Stage2 --repo-type dataset --local-dir Mentor_Stage2
 cd Mentor_Stage2
 cat stage2_data.tar.gz.part-* | pv | tar -xzf -
+cd ..
 ```
 
-### train
+### 🏋️‍♂️ Training
 ```bash
-# stage 1 training
+# Stage 1 training
 bash scripts/autoregressive/train_stage1.sh
 
-# stage 2 training
+# Stage 2 training
 bash scripts/autoregressive/train_stage2.sh
 
-# ablation training
+# Run ablation experiments
 bash scripts/autoregressive/ablation.sh
 ```
 
-<div align="center">
+
+<!-- <div align="center">
   <a href="https://colab.research.google.com/drive/xxx" target="_blank">
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
   </a>
   <a href="https://huggingface.co/spaces/MENTOR/demo" target="_blank">
     <img src="https://img.shields.io/badge/🤗-Try%20Demo-yellow.svg" alt="Hugging Face Demo"/>
   </a>
-</div>
+</div> -->
 
 ---
 
@@ -188,32 +210,6 @@ bash scripts/autoregressive/ablation.sh
 
 </details>
 
----
-
-## 💻 Installation
-
-<details>
-<summary><b>Requirements</b></summary>
-
-- Python ≥ 3.8
-- PyTorch ≥ 2.1.0
-- CUDA ≥ 11.8
-- 8× NVIDIA A100 GPUs (80GB) for training
-- 1× GPU (24GB) for inference
-
-</details>
-
-```bash
-# Clone repository
-git clone https://github.com/HaozheZhao/MENTOR.git
-cd MENTOR
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Download pretrained models
-python scripts/download_models.py
-```
 
 ---
 
@@ -305,9 +301,9 @@ The AR decoder θ generates image sequence **y**:
 <summary><b>🔧 Training Configuration</b></summary>
 
 ### Hyperparameters
-- **Optimizer**: AdamW (β₁=0.9, β₂=0.999)
+- **Optimizer**: AdamW
 - **Learning Rate**: Stage 1: 5e-4, Stage 2: 1e-4
-- **Batch Size**: 128 (global)
+- **Batch Size**: 96 for stage1 and 64 for stage 2(global)
 - **Warmup**: 5% of total steps
 - **Schedule**: Cosine decay
 
