@@ -13,7 +13,7 @@
   <img src="figures/teasarv3.png" width="100%" alt="MENTOR Overview" />
 </p>
 
-**[📄 Paper](https://arxiv.org/abs/XXXX.XXXXX)** | **[💻 Code](https://github.com/HaozheZhao/MENTOR)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[🤗 Stage1 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage1)**| | **[🤗 Stage2 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage2)**| 
+**[📄 Paper](https://www.arxiv.org/abs/2507.09574)** | **[💻 Code](https://github.com/HaozheZhao/MENTOR)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[🤗 Stage1 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage1)**| | **[🤗 Stage2 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage2)**| 
 
 </div>
 
@@ -363,11 +363,14 @@ We identified and resolved a critical bug in [LlamaGen](https://github.com/Found
 If you find MENTOR useful, please cite our paper:
 
 ```bibtex
-@inproceedings{zhao2024mentor,
-  title={MENTOR: Efficient Multimodal-Conditioned Tuning for Autoregressive Vision Generation Models},
-  author={Zhao, Haozhe* and Cai, Zefan* and Si, Shuzheng and Chen, Liang and 
-          Gu, Jiuxiang and Xiao, Wen and Hu, Junjie},
-  year={2024}
+@misc{zhao2025mentorefficientmultimodalconditionedtuning,
+      title={MENTOR: Efficient Multimodal-Conditioned Tuning for Autoregressive Vision Generation Models}, 
+      author={Haozhe Zhao and Zefan Cai and Shuzheng Si and Liang Chen and Jiuxiang Gu and Wen Xiao and Junjie Hu},
+      year={2025},
+      eprint={2507.09574},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2507.09574}, 
 }
 ```
 
