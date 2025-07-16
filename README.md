@@ -13,7 +13,7 @@
   <img src="figures/teasarv3.png" width="100%" alt="MENTOR Overview" />
 </p>
 
-**[📄 Paper](https://www.arxiv.org/abs/2507.09574)** | **[💻 Code](https://github.com/HaozheZhao/MENTOR)** | **[🤗 Models](https://huggingface.co/MENTOR)** | **[🤗 Stage1 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage1)**| | **[🤗 Stage2 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage2)**| 
+**[📄 Paper](https://www.arxiv.org/abs/2507.09574)** | **[💻 Code](https://github.com/HaozheZhao/MENTOR)** | **[🤗 Models](https://huggingface.co/BleachNick/Mentor)** | **[🤗 Stage1 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage1)**| | **[🤗 Stage2 Data](https://huggingface.co/datasets/BleachNick/Mentor_Stage2)**| 
 
 </div>
 
