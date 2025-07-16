@@ -4,7 +4,7 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2507.09574-B31B1B.svg?style=for-the-badge)](https://arxiv.org/abs/2507.09574)
 [![Project Page](https://img.shields.io/badge/Project-Page-green.svg?style=for-the-badge)](https://haozhezhao.github.io/MENTOR.page)
-[![Hugging Face](https://img.shields.io/badge/🤗-Models-yellow.svg?style=for-the-badge)](https://huggingface.co/MENTOR)
+[![Hugging Face](https://img.shields.io/badge/🤗-Models-yellow.svg?style=for-the-badge)](https://huggingface.co/BleachNick/Mentor)
 <!-- [![Demo](https://img.shields.io/badge/🎯-Demo-red.svg?style=for-the-badge)](https://huggingface.co/spaces/MENTOR/demo) -->
 
 <h3>🏆 Efficient Autoregressive Multimodal Image Generation with 10× Less Data</h3>
